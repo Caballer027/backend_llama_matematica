@@ -1,8 +1,33 @@
-// src/controllers/personajeController.js (V5 – COMPLETO, CORREGIDO y OPTIMIZADO)
+// ============================================================
+// src/controllers/personajeController.js — V6 (CLOUDINARY MIGRADO)
+// ============================================================
+
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
-const path = require('path');
-const fs = require('fs');
+
+// const path = require('path');   // ❌ YA NO SE USA PARA AVATARES
+// const fs = require('fs');       // ❌ YA NO SE USA PARA AVATARES
+
+// ============================================================
+// CLOUDINARY
+// ============================================================
+const { v2: cloudinary } = require('cloudinary');
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+});
+
+// Extraer el public_id desde una URL de Cloudinary
+const extractPublicId = (url) => {
+  if (!url || typeof url !== 'string' || !url.includes('res.cloudinary.com')) return null;
+  const parts = url.split('/');
+  const versionIndex = parts.findIndex(p => p.startsWith('v'));
+  if (versionIndex === -1) return null;
+  const publicIdWithExt = parts.slice(versionIndex + 1).join('/');
+  return publicIdWithExt.substring(0, publicIdWithExt.lastIndexOf('.'));
+};
 
 // ============================================================
 // GET /api/personajes
@@ -43,11 +68,9 @@ exports.seleccionarPersonaje = async (req, res) => {
     });
   }
 
-  const personajeIdNum = Number(personajeId);
-
   try {
     const personaje = await prisma.personajes.findUnique({
-      where: { id: personajeIdNum }
+      where: { id: Number(personajeId) }
     });
 
     if (!personaje) {
@@ -58,7 +81,7 @@ exports.seleccionarPersonaje = async (req, res) => {
 
     const usuarioActualizado = await prisma.usuarios.update({
       where: { id: usuarioId },
-      data: { personaje_activo_id: personajeIdNum },
+      data: { personaje_activo_id: Number(personajeId) },
       select: {
         personaje_activo: {
           select: {
@@ -107,7 +130,8 @@ exports.createPersonaje = async (req, res) => {
   }
 
   try {
-    const url_imagen_base = '/assets/' + file.filename;
+    // AHORA SE USA LA URL COMPLETA DE CLOUDINARY
+    const url_imagen_base = file.path;
 
     const nuevo = await prisma.personajes.create({
       data: {
@@ -149,13 +173,14 @@ exports.updatePersonaje = async (req, res) => {
     let url_imagen_base = personaje.url_imagen_base;
 
     if (file) {
+      // BORRAR LA IMAGEN ANTERIOR EN CLOUDINARY
       if (url_imagen_base) {
-        const oldPath = path.join(__dirname, '../../public', url_imagen_base);
-        if (fs.existsSync(oldPath)) {
-          fs.unlinkSync(oldPath);
-        }
+        const publicId = extractPublicId(url_imagen_base);
+        if (publicId) await cloudinary.uploader.destroy(publicId);
       }
-      url_imagen_base = '/assets/' + file.filename;
+
+      // NUEVA IMG - URL DE CLOUDINARY
+      url_imagen_base = file.path;
     }
 
     const actualizado = await prisma.personajes.update({
@@ -179,7 +204,7 @@ exports.updatePersonaje = async (req, res) => {
 };
 
 // ============================================================
-// DELETE /api/personajes/:id  🔥 (LIMPIEZA PROFUNDA COMPLETA)
+// DELETE /api/personajes/:id 🔥 (Cloudinary MIGRADO)
 // ============================================================
 exports.deletePersonaje = async (req, res) => {
   const { id } = req.params;
@@ -193,32 +218,32 @@ exports.deletePersonaje = async (req, res) => {
       return res.status(404).json({ error: 'Personaje no encontrado' });
     }
 
-    const keyToDelete = personaje.asset_key; // ej: "LEON"
+    const keyToDelete = personaje.asset_key;
 
     await prisma.$transaction(async (tx) => {
 
-      // A. Eliminar avatar base del personaje
+      // A. ELIMINAR AVATAR BASE EN CLOUDINARY
       if (personaje.url_imagen_base) {
-        const avatarPath = path.join(__dirname, '../../public', personaje.url_imagen_base);
-        if (fs.existsSync(avatarPath)) {
-          try { fs.unlinkSync(avatarPath); } catch (e) {}
-        }
+        const publicId = extractPublicId(personaje.url_imagen_base);
+        if (publicId) await cloudinary.uploader.destroy(publicId);
       }
 
-      // B. Limpieza profunda en items
+      // B. LIMPIEZA PROFUNDA EN ITEMS (SE DEJA IGUAL - PENDIENTE MIGRACIÓN)
       const items = await tx.items.findMany();
 
       for (const item of items) {
         const equipado = item.url_imagenes_equipado || {};
 
         if (equipado[keyToDelete]) {
-          const rutaRopa = equipado[keyToDelete];
+          // 🚫 ESTA ROPA SIGUE EN DISCO — SE MIGRARÁ EN MÓDULO ITEMS
+          const path = require('path');
+          const fs = require('fs');
 
-          if (rutaRopa !== item.url_icono_tienda) {
-            const ropaPath = path.join(__dirname, '../../public', rutaRopa);
-            if (fs.existsSync(ropaPath)) {
-              try { fs.unlinkSync(ropaPath); } catch (e) {}
-            }
+          const rutaRopa = equipado[keyToDelete];
+          const ropaPath = path.join(__dirname, '../../public', rutaRopa);
+
+          if (fs.existsSync(ropaPath)) {
+            try { fs.unlinkSync(ropaPath); } catch (e) {}
           }
 
           delete equipado[keyToDelete];
@@ -230,7 +255,7 @@ exports.deletePersonaje = async (req, res) => {
         }
       }
 
-      // C. Borrar personaje
+      // C. ELIMINAR PERSONAJE
       await tx.personajes.delete({
         where: { id: Number(id) }
       });

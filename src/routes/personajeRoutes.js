@@ -1,5 +1,5 @@
 // ============================================================
-// src/routes/personajeRoutes.js (V6.0 – COMPLETO, ACTUALIZADO Y FUNCIONAL)
+// src/routes/personajeRoutes.js (V7.0 – MIGRADO A CLOUDINARY, COMPLETO)
 // ============================================================
 
 const express = require('express');
@@ -9,26 +9,10 @@ const personajeController = require('../controllers/personajeController');
 const protect = require('../middleware/authMiddleware');
 const roleMiddleware = require('../middleware/roleMiddleware');
 
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
-
 // ============================================================
-// 🧩 MULTER: Guardar imágenes en /public/personajes
+// 🆕 REEMPLAZO: Multer local → uploadMiddleware (Cloudinary)
 // ============================================================
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const dir = path.join(__dirname, '../../public/personajes');
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    cb(null, dir);
-  },
-  filename: function (req, file, cb) {
-    const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, unique + path.extname(file.originalname));
-  }
-});
-
-const upload = multer({ storage });
+const upload = require('../middleware/uploadMiddleware');
 
 // ============================================================
 // SWAGGER: Personajes
@@ -131,7 +115,7 @@ router.post('/seleccionar', personajeController.seleccionarPersonaje);
 router.post(
   '/',
   roleMiddleware.isAdmin,
-  upload.single('imagen'),
+  upload.single('imagen'), // <--- AHORA USA CLOUDINARY
   personajeController.createPersonaje
 );
 
@@ -169,7 +153,7 @@ router.post(
 router.put(
   '/:id',
   roleMiddleware.isAdmin,
-  upload.single('imagen'),
+  upload.single('imagen'), // <--- AHORA USA CLOUDINARY
   personajeController.updatePersonaje
 );
 
