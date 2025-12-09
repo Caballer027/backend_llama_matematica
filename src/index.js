@@ -34,6 +34,13 @@ const adminRoutes = require('./routes/adminRoutes');
 const swaggerUi = require('swagger-ui-express');
 const swaggerJsdoc = require('swagger-jsdoc');
 
+// ===============================================
+// 🔴 NUEVO CÓDIGO (Para Swagger Dinámico)
+// ===============================================
+// Obtener la URL de Render, o usar localhost por defecto
+const renderUrl = process.env.RENDER_EXTERNAL_URL; 
+const baseUrl = renderUrl ? `${renderUrl}/api` : 'http://localhost:3000/api';
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -46,9 +53,15 @@ const swaggerOptions = {
       version: '1.0.0',
       description: 'Documentación oficial de la API.',
     },
+    // ===============================================
+    // 🔴 MODIFICACIÓN 1: SERVER URL
+    // ===============================================
     servers: [
-      { url: 'http://localhost:3000/api', description: 'Servidor Local' },
+      { url: baseUrl, description: 'Servidor Desplegado/Local' }, // <-- Usamos la URL dinámica
     ],
+    // ===============================================
+    // 🔴 FIN DE MODIFICACIÓN 1
+    // ===============================================
     components: {
       securitySchemes: {
         bearerAuth: {
@@ -68,13 +81,12 @@ const swaggerDocs = swaggerJsdoc(swaggerOptions);
 // -----------------------------------------
 
 // ===============================================
-// 🔴 MODIFICACIÓN CRÍTICA: CORS PARA DESPLIEGUE
+// 🔴 MODIFICACIÓN 2: CORS PARA DESPLIEGUE
 // ===============================================
-
 // Arreglo de orígenes permitidos: local para desarrollo, FRONTEND_URL para Vercel
 const allowedOrigins = [
-    'http://localhost:5173',
-    process.env.FRONTEND_URL
+    'http://localhost:5173',
+    process.env.FRONTEND_URL // Usará la variable que configuraste en Render
 ];
 
 app.use(cors({
@@ -82,7 +94,7 @@ app.use(cors({
   credentials: true
 }));
 // ===============================================
-// 🔴 FIN DE MODIFICACIÓN
+// 🔴 FIN DE MODIFICACIÓN 2
 // ===============================================
 
 
