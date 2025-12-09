@@ -11,7 +11,6 @@ function normalizeRespuesta(texto) {
 
 /**
  * Oculta la información sensible de una pregunta antes de enviarla al cliente.
- * NOTA: ya no enviamos "pista".
  */
 function limpiarPreguntaParaCliente(pregunta) {
   if (!pregunta) return null;
@@ -19,7 +18,7 @@ function limpiarPreguntaParaCliente(pregunta) {
     id: pregunta.id,
     enunciado_pregunta: pregunta.enunciado_pregunta,
     tipo_pregunta: pregunta.tipo_pregunta,
-    pasos_guia: pregunta.pasos_guia, // guia de pago (JSON o string)
+    pasos_guia: pregunta.pasos_guia,
     opciones_respuesta: pregunta.opciones_respuesta?.map(op => ({
       id: op.id,
       texto_respuesta: op.texto_respuesta,
@@ -213,7 +212,20 @@ exports.finishQuizSession = async (req, res) => {
       return res.status(404).json({ error: 'Sesión no encontrada.' });
     }
 
-    // Calcular totales del intento
+    // ============================================================
+    // 1. OBTENER CONFIGURACIÓN DE LA LECCIÓN (Gemas y XP Base)
+    // ============================================================
+    const leccionData = await prisma.lecciones.findUnique({
+      where: { id: sesion.leccion_id },
+      select: { gemas: true, puntos_experiencia: true }
+    });
+
+    const BASE_GEMAS = leccionData.gemas || 50;
+    const BASE_XP = leccionData.puntos_experiencia || 100;
+
+    // ============================================================
+    // 2. Calcular totales del intento
+    // ============================================================
     let xp_total_intento = 0;
     let puntos_total_intento = 0;
     let correctas = 0;
@@ -222,20 +234,30 @@ exports.finishQuizSession = async (req, res) => {
     for (const intento of sesion.intentos) {
       if (intento.es_correcta) {
         xp_total_intento += intento.xp_ganada || 0;
-        puntos_total_intento += (intento.preguntas && intento.preguntas.puntos_otorgados) ? intento.preguntas.puntos_otorgados : 10;
+        puntos_total_intento += (intento.preguntas && intento.preguntas.puntos_otorgados)
+          ? intento.preguntas.puntos_otorgados
+          : 10;
         correctas++;
       } else {
         preguntasFalladas.push(intento.preguntas);
       }
     }
-    const totalPreguntas = sesion.intentos.length;
 
+    const totalPreguntas = sesion.intentos.length;
     const porcentajeAcertado = totalPreguntas > 0 ? (correctas / totalPreguntas) : 0;
-    let gemas_total_intento = Math.ceil(porcentajeAcertado * 10);
-    if (porcentajeAcertado >= 0.8) gemas_total_intento += 5;
+
+    // ============================================================
+    // 3. Cálculo dinámico de gemas
+    // ============================================================
+    let gemas_total_intento = Math.round(BASE_GEMAS * porcentajeAcertado);
+
+    if (porcentajeAcertado >= 0.8) {
+      gemas_total_intento += Math.round(BASE_GEMAS * 0.1); // Bonus 10%
+    }
 
     const guiasUsadas = sesion.intentos.filter(i => i.acepto_guia).length;
     const gemasPenalizadas = guiasUsadas * PENALIZACION_POR_GUIA;
+
     const gemasFinalesCalculadas = Math.max(0, gemas_total_intento - gemasPenalizadas);
 
     const progresoAnterior = await prisma.progreso_lecciones_usuario.findUnique({
@@ -243,15 +265,17 @@ exports.finishQuizSession = async (req, res) => {
       select: { puntaje_total: true, xp_ganada: true, gemas_ganadas: true }
     });
 
-    // 5. Iniciar Transacción Final: actualizar progreso (mejor puntaje), usuario (sumas), y sesión (guardar puntaje del intento)
+    // ============================================================
+    // 4. Transacción de guardado final
+    // ============================================================
     const [progresoActualizado, usuarioActualizado, sesionTerminada] = await prisma.$transaction([
       prisma.progreso_lecciones_usuario.update({
         where: { id: sesion.progreso_leccion_id },
         data: {
           estado: 'completado',
-          puntaje_total: Math.max((progresoAnterior && progresoAnterior.puntaje_total) || 0, puntos_total_intento),
-          xp_ganada: Math.max((progresoAnterior && progresoAnterior.xp_ganada) || 0, xp_total_intento),
-          gemas_ganadas: Math.max((progresoAnterior && progresoAnterior.gemas_ganadas) || 0, gemasFinalesCalculadas)
+          puntaje_total: Math.max((progresoAnterior?.puntaje_total || 0), puntos_total_intento),
+          xp_ganada: Math.max((progresoAnterior?.xp_ganada || 0), xp_total_intento),
+          gemas_ganadas: Math.max((progresoAnterior?.gemas_ganadas || 0), gemasFinalesCalculadas)
         }
       }),
       prisma.usuarios.update({
@@ -273,8 +297,11 @@ exports.finishQuizSession = async (req, res) => {
       })
     ]);
 
-    // Generar feedback IA si hubo fallos
+    // ============================================================
+    // 5. IA Feedback
+    // ============================================================
     let feedbackId = null;
+
     if (preguntasFalladas.length > 0) {
       try {
         const feedbackJson = await iaService.generarFeedback(preguntasFalladas);
@@ -299,6 +326,7 @@ exports.finishQuizSession = async (req, res) => {
               }
             }
           });
+
           feedbackId = nuevoFeedback.id;
 
           await prisma.error_ejercicio.deleteMany({ where: { feedback_id: feedbackId } });
@@ -314,10 +342,13 @@ exports.finishQuizSession = async (req, res) => {
           }
         }
       } catch (iaError) {
-        console.error('⚠️ Fallo en la generación de feedback de IA (no crítico):', iaError.message);
+        console.error('⚠️ Fallo en la generación de feedback IA:', iaError.message);
       }
     }
 
+    // ============================================================
+    // 6. Respuesta final
+    // ============================================================
     res.json({
       message: "¡Quiz finalizado con éxito!",
       puntaje_total_intento: puntos_total_intento,
@@ -339,7 +370,7 @@ exports.finishQuizSession = async (req, res) => {
 
   } catch (error) {
     console.error('❌ Error al finalizar el quiz:', error);
-    res.status(500).json({ error: 'Error al finalizar la sesión de quiz.' });
+    res.status(500).json({ error: 'Error al finalizar la sesión.' });
   }
 };
 
@@ -383,7 +414,6 @@ exports.getActiveSession = async (req, res) => {
 // ============================================================
 // GET /api/quiz/history
 // ============================================================
-// Devuelve historial de intentos por usuario (usando quiz_session)
 exports.getQuizHistory = async (req, res) => {
   const usuarioId = BigInt(req.usuario.id);
 
@@ -417,7 +447,7 @@ exports.getQuizHistory = async (req, res) => {
       xp_ganada: s.xp_obtenida || 0,
       gemas_ganadas: s.gemas_obtenidas || 0,
       intentos_totales: s.progreso_leccion ? (s.progreso_leccion.intentos || 0) : 0,
-      feedbackId: s.progreso_leccion && s.progreso_leccion.feedback_ia ? s.progreso_leccion.feedback_ia.id.toString() : null,
+      feedbackId: s.progreso_leccion?.feedback_ia ? s.progreso_leccion.feedback_ia.id.toString() : null,
       fecha: s.fecha_inicio
     }));
 
@@ -449,7 +479,7 @@ exports.getQuizPodium = async (req, res) => {
 
     const podium = top.map((p, idx) => ({
       position: idx + 1,
-      usuarioId: p.usuario_id.toString ? p.usuario_id.toString() : p.usuario_id,
+      usuarioId: p.usuario_id.toString(),
       nombre: p.usuarios ? `${p.usuarios.nombre || ''} ${p.usuarios.apellido || ''}`.trim() : null,
       puntaje_total: p.puntaje_total || 0,
       xp_ganada: p.xp_ganada || 0,

@@ -1,11 +1,34 @@
 // ============================================================
-// src/routes/personajeRoutes.js (V4.2 - COMPLETO Y ACTUALIZADO)
+// src/routes/personajeRoutes.js (V6.0 – COMPLETO, ACTUALIZADO Y FUNCIONAL)
 // ============================================================
 
 const express = require('express');
 const router = express.Router();
+
 const personajeController = require('../controllers/personajeController');
-const authMiddleware = require('../middleware/authMiddleware');
+const protect = require('../middleware/authMiddleware');
+const roleMiddleware = require('../middleware/roleMiddleware');
+
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+// ============================================================
+// 🧩 MULTER: Guardar imágenes en /public/personajes
+// ============================================================
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    const dir = path.join(__dirname, '../../public/personajes');
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
+  filename: function (req, file, cb) {
+    const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    cb(null, unique + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({ storage });
 
 // ============================================================
 // SWAGGER: Personajes
@@ -14,11 +37,13 @@ const authMiddleware = require('../middleware/authMiddleware');
  * @swagger
  * tags:
  *   name: Personajes
- *   description: Endpoints para listar y seleccionar personajes del sistema.
+ *   description: Endpoints para gestionar personajes del sistema.
  */
 
-// Se requiere autenticación para todos los endpoints
-router.use(authMiddleware);
+// ============================================================
+// 🔐 Todas las rutas requieren autenticación
+// ============================================================
+router.use(protect);
 
 // ===================================================================
 // GET /api/personajes
@@ -29,41 +54,14 @@ router.use(authMiddleware);
  *   get:
  *     summary: Obtiene la lista de todos los personajes disponibles
  *     tags: [Personajes]
- *     description: |
- *       Devuelve un listado con los personajes base del sistema.  
- *       Cada personaje contiene información visual y narrativa, como su nombre, imagen y mensajes.
+ *     description: Lista de personajes con datos visuales y descripciones.
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       '200':
- *         description: Lista de personajes obtenida con éxito.
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items:
- *                 type: object
- *                 properties:
- *                   id:
- *                     type: integer
- *                     example: 1
- *                   nombre:
- *                     type: string
- *                     example: "Khipu"
- *                   asset_key:
- *                     type: string
- *                     example: "khipu_asset"
- *                   url_imagen_base:
- *                     type: string
- *                     example: "https://cdn.servidor.com/khipu.png"
- *                   mensaje_corta:
- *                     type: string
- *                     example: "El sabio guía de los Andes."
- *                   mensaje_larga:
- *                     type: string
- *                     example: "Khipu te ayudará a superar desafíos matemáticos con su sabiduría ancestral."
+ *         description: Lista de personajes obtenida exitosamente.
  *       '500':
- *         description: Error interno del servidor al obtener los personajes.
+ *         description: Error interno del servidor.
  */
 router.get('/', personajeController.getAllPersonajes);
 
@@ -76,11 +74,9 @@ router.get('/', personajeController.getAllPersonajes);
  *   post:
  *     summary: Selecciona el personaje activo del usuario
  *     tags: [Personajes]
- *     description: |
- *       Actualiza el perfil del usuario autenticado para establecer qué personaje está usando actualmente.  
- *       El usuario debe enviar el `personajeId` del personaje que desea seleccionar.
  *     security:
  *       - bearerAuth: []
+ *     description: Selecciona qué personaje estará activo para el usuario.
  *     requestBody:
  *       required: true
  *       content:
@@ -90,47 +86,122 @@ router.get('/', personajeController.getAllPersonajes);
  *             properties:
  *               personajeId:
  *                 type: integer
- *                 description: ID del personaje a seleccionar.
- *                 example: 2
+ *                 example: 3
  *     responses:
  *       '200':
- *         description: ¡Éxito! Personaje seleccionado correctamente.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                   example: "¡Has seleccionado a Inti!"
- *                 personajeActivo:
- *                   type: object
- *                   properties:
- *                     id:
- *                       type: integer
- *                       example: 2
- *                     nombre:
- *                       type: string
- *                       example: "Inti"
- *                     asset_key:
- *                       type: string
- *                       example: "inti_asset"
- *                     url_imagen_base:
- *                       type: string
- *                       example: "https://cdn.servidor.com/inti.png"
- *                     mensaje_corta:
- *                       type: string
- *                       example: "El dios del Sol brillante."
- *                     mensaje_larga:
- *                       type: string
- *                       example: "Inti te llenará de energía y motivación en cada reto."
+ *         description: Personaje seleccionado correctamente.
  *       '400':
- *         description: El ID del personaje es requerido.
+ *         description: Falta ID del personaje.
  *       '404':
- *         description: Personaje o usuario no encontrado.
- *       '500':
- *         description: Error interno del servidor al seleccionar el personaje.
+ *         description: Personaje no encontrado.
  */
 router.post('/seleccionar', personajeController.seleccionarPersonaje);
+
+// ============================================================
+// 🔥 CRUD ADMIN
+// ============================================================
+
+// ===================================================================
+// POST /api/personajes  (Crear personaje)
+// ===================================================================
+/**
+ * @swagger
+ * /personajes:
+ *   post:
+ *     summary: Crea un nuevo personaje (ADMIN)
+ *     tags: [Personajes]
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               nombre: { type: string }
+ *               asset_key: { type: string }
+ *               mensaje_corta: { type: string }
+ *               mensaje_larga: { type: string }
+ *               imagen:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       '201': { description: Personaje creado. }
+ */
+router.post(
+  '/',
+  roleMiddleware.isAdmin,
+  upload.single('imagen'),
+  personajeController.createPersonaje
+);
+
+// ===================================================================
+// PUT /api/personajes/:id (Actualizar personaje)
+// ===================================================================
+/**
+ * @swagger
+ * /personajes/{id}:
+ *   put:
+ *     summary: Actualiza un personaje (ADMIN)
+ *     tags: [Personajes]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               nombre: { type: string }
+ *               mensaje_corta: { type: string }
+ *               mensaje_larga: { type: string }
+ *               imagen:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       '200': { description: Personaje actualizado correctamente. }
+ *       '404': { description: Personaje no encontrado. }
+ */
+router.put(
+  '/:id',
+  roleMiddleware.isAdmin,
+  upload.single('imagen'),
+  personajeController.updatePersonaje
+);
+
+// ===================================================================
+// DELETE /api/personajes/:id (Eliminar personaje con Limpieza Profunda)
+// ===================================================================
+/**
+ * @swagger
+ * /personajes/{id}:
+ *   delete:
+ *     summary: Elimina un personaje (ADMIN) junto con sus assets asociados
+ *     tags: [Personajes]
+ *     security: [{ bearerAuth: [] }]
+ *     description: >
+ *       Elimina un personaje, su imagen base y **todas las imágenes equipables**
+ *       relacionadas dentro de los ítems de la tienda (limpieza profunda).
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       '200':
+ *         description: Personaje y assets eliminados correctamente.
+ *       '400':
+ *         description: No se puede eliminar porque está en uso por un usuario.
+ *       '404':
+ *         description: Personaje no encontrado.
+ *       '500':
+ *         description: Error interno del servidor.
+ */
+router.delete('/:id', roleMiddleware.isAdmin, personajeController.deletePersonaje);
 
 module.exports = router;

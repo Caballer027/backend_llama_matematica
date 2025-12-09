@@ -1,176 +1,252 @@
-// src/routes/adminRoutes.js
+// ============================================================
+// src/routes/adminRoutes.js — FINAL 8.0 (SEGURIDAD HÍBRIDA)
+// ============================================================
+
 const express = require('express');
 const router = express.Router();
 const adminController = require('../controllers/adminController');
-const authMiddleware = require('../middleware/authMiddleware');
-const adminMiddleware = require('../middleware/adminMiddleware');
 
-// ============================================================
-// 📘 TAG SWAGGER
-// ============================================================
+// Middlewares
+const authMiddleware = require('../middleware/authMiddleware');
+const roleMiddleware = require('../middleware/roleMiddleware');
+
 /**
  * @swagger
  * tags:
  *   name: Admin
- *   description: Endpoints para la gestión de usuarios (Requiere rol de Administrador).
+ *   description: Panel de control, analítica y gestión (Acceso Admin y Profesores)
  */
 
-// ============================================================
-// 🧱 MIDDLEWARES DE SEGURIDAD
-// ============================================================
-// Todas las rutas aquí requieren token válido y rol de administrador
-router.use(authMiddleware, adminMiddleware);
+// 🔒 SEGURIDAD BASE: Todo requiere estar logueado
+router.use(authMiddleware);
 
 // ============================================================
-// ✅ GET /api/admin/usuarios
+// 🟢 ZONA COMÚN (ADMIN + PROFESORES)
+// Dashboard, Analíticas y Lista de Estudiantes
 // ============================================================
+
+/**
+ * @swagger
+ * /admin/dashboard:
+ *   get:
+ *     summary: Dashboard Operativo (KPIs y Alertas)
+ *     description: Retorna métricas y alertas. Si es Profesor, solo ve su institución.
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Datos obtenidos.
+ */
+router.get(
+  '/dashboard',
+  roleMiddleware.isTeacherOrAdmin,
+  adminController.getDashboardStats
+);
+
+/**
+ * @swagger
+ * /admin/analytics:
+ *   get:
+ *     summary: Analítica Visual (Gráficos)
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Datos de gráficas.
+ */
+router.get(
+  '/analytics',
+  roleMiddleware.isTeacherOrAdmin,
+  adminController.getAnalytics
+);
+
+/**
+ * @swagger
+ * /admin/analytics/advanced:
+ *   get:
+ *     summary: Reportes Académicos Detallados
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Reportes detallados.
+ */
+router.get(
+  '/analytics/advanced',
+  roleMiddleware.isTeacherOrAdmin,
+  adminController.getAdvancedReports
+);
+
+/**
+ * @swagger
+ * /admin/estudiantes:
+ *   get:
+ *     summary: Listar estudiantes (Progreso y Economía)
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Lista de estudiantes.
+ */
+router.get(
+  '/estudiantes',
+  roleMiddleware.isTeacherOrAdmin,
+  adminController.getEstudiantes
+);
+
+// ============================================================
+// 🔴 ZONA EXCLUSIVA (SOLO ADMIN)
+// Gestión de Usuarios, Profesores y Borrado
+// ============================================================
+
 /**
  * @swagger
  * /admin/usuarios:
  *   get:
- *     summary: Obtiene la lista de todos los usuarios (Solo Admin)
+ *     summary: Listar TODOS los usuarios del sistema (Solo Admin)
  *     tags: [Admin]
- *     description: Devuelve un array con los datos principales de todos los usuarios registrados en la plataforma.
  *     security:
- *       - bearerAuth: []  # Requiere token de administrador
+ *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: Lista de usuarios obtenida con éxito.
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items:
- *                 type: object
- *                 properties:
- *                   id:
- *                     type: string
- *                     example: "1"
- *                   nombre:
- *                     type: string
- *                     example: "Juan"
- *                   apellido:
- *                     type: string
- *                     example: "Pérez"
- *                   correo_electronico:
- *                     type: string
- *                     example: "juan.perez@tecsup.edu.pe"
- *                   puntos_experiencia:
- *                     type: integer
- *                     example: 1500
- *                   gemas:
- *                     type: integer
- *                     example: 250
- *                   rol:
- *                     type: string
- *                     example: "Estudiante"
- *       401:
- *         description: No autorizado (token ausente o inválido).
- *       403:
- *         description: Prohibido (el usuario no es administrador).
- *       500:
- *         description: Error interno del servidor.
+ *         description: Lista completa.
  */
-router.get('/usuarios', adminController.getAllUsers);
+router.get(
+  '/usuarios',
+  roleMiddleware.isAdmin,
+  adminController.getAllUsers
+);
 
-// ============================================================
-// ✅ GET /api/admin/usuarios/:id
-// ============================================================
 /**
  * @swagger
  * /admin/usuarios/{id}:
  *   get:
- *     summary: Obtiene el perfil detallado de un usuario (Solo Admin)
+ *     summary: Ver perfil completo de usuario
  *     tags: [Admin]
- *     description: Devuelve el perfil completo de un usuario, incluyendo su historial de progreso, personaje activo y datos académicos.
  *     security:
- *       - bearerAuth: []  # Requiere token de administrador
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
  *         schema:
  *           type: string
- *         description: ID del usuario (convertido a string en la respuesta)
- *         example: "1"
  *     responses:
  *       200:
- *         description: Perfil detallado del usuario.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 id:
- *                   type: string
- *                   example: "1"
- *                 nombre:
- *                   type: string
- *                   example: "Juan"
- *                 apellido:
- *                   type: string
- *                   example: "Pérez"
- *                 correo_electronico:
- *                   type: string
- *                   example: "juan.perez@tecsup.edu.pe"
- *                 fecha_nacimiento:
- *                   type: string
- *                   format: date
- *                   example: "2004-03-27"
- *                 ano_ingreso:
- *                   type: integer
- *                   example: 2025
- *                 puntos_experiencia:
- *                   type: integer
- *                   example: 1500
- *                 gemas:
- *                   type: integer
- *                   example: 250
- *                 rol:
- *                   type: string
- *                   example: "Estudiante"
- *                 institucion:
- *                   type: string
- *                   example: "Tecsup"
- *                 carrera:
- *                   type: string
- *                   example: "Diseño y Desarrollo de Software"
- *                 personaje_activo:
- *                   type: object
- *                   nullable: true
- *                   properties:
- *                     nombre:
- *                       type: string
- *                       example: "Khipu"
- *                     asset_key:
- *                       type: string
- *                       example: "khipu_default"
- *                 historial_progreso:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       leccion:
- *                         type: string
- *                         example: "Introducción a las Variables"
- *                       estado:
- *                         type: string
- *                         example: "completado"
- *                       puntaje_total:
- *                         type: integer
- *                         example: 95
- *                       intentos:
- *                         type: integer
- *                         example: 2
- *       401:
- *         description: No autorizado.
- *       403:
- *         description: Prohibido (no es administrador).
- *       404:
- *         description: Usuario no encontrado.
- *       500:
- *         description: Error interno del servidor.
+ *         description: Detalle usuario.
  */
-router.get('/usuarios/:id', adminController.getUserById);
+router.get(
+  '/usuarios/:id',
+  roleMiddleware.isAdmin,
+  adminController.getUserById
+);
+
+/**
+ * @swagger
+ * /admin/users/{id}:
+ *   delete:
+ *     summary: Eliminar cualquier usuario
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Usuario eliminado.
+ */
+router.delete(
+  '/users/:id',
+  roleMiddleware.isAdmin,
+  adminController.deleteUsuario
+);
+
+/**
+ * @swagger
+ * /admin/profesores:
+ *   get:
+ *     summary: Listar profesores y cursos
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Lista profesores.
+ *
+ *   post:
+ *     summary: Crear nuevo profesor
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [nombre, apellido, correo_electronico, contrasena]
+ *             properties:
+ *               nombre:
+ *                 type: string
+ *               apellido:
+ *                 type: string
+ *               correo_electronico:
+ *                 type: string
+ *               contrasena:
+ *                 type: string
+ *               institucion_id:
+ *                 type: integer
+ *     responses:
+ *       201:
+ *         description: Profesor creado.
+ */
+router.get(
+  '/profesores',
+  roleMiddleware.isAdmin,
+  adminController.getAllProfessors
+);
+
+router.post(
+  '/profesores',
+  roleMiddleware.isAdmin,
+  adminController.createProfessor
+);
+
+/**
+ * @swagger
+ * /admin/profesores/asignar-curso:
+ *   post:
+ *     summary: Asignar curso a profesor
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               profesor_id:
+ *                 type: string
+ *               curso_id:
+ *                 type: integer
+ *     responses:
+ *       200:
+ *         description: Asignado.
+ */
+router.post(
+  '/profesores/asignar-curso',
+  roleMiddleware.isAdmin,
+  adminController.assignCourseToProfessor
+);
 
 module.exports = router;

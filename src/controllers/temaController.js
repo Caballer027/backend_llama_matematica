@@ -1,13 +1,14 @@
 // src/controllers/temaController.js
-const prisma = require('../prismaClient'); // (Usamos tu importación original)
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
+const fs = require('fs');
+const path = require('path');
 
 // ============================================================
-// GET /api/temas/:id (Para la pantalla de "Historia")
-// ¡CORREGIDO CON LOS NOMBRES DE CAMPO REALES!
+// GET /api/temas/:id
 // ============================================================
 exports.getTemaById = async (req, res) => {
   const temaId = Number(req.params.id);
-
   try {
     const tema = await prisma.temas.findUnique({
       where: { id: temaId },
@@ -18,17 +19,13 @@ exports.getTemaById = async (req, res) => {
         historia_introduccion: true,
         historia_nudo: true,
         historia_desenlace: true,
-        
-        // --- 👇 CORRECCIÓN BASADA EN TU LOG DE ERROR ---
-        url_imagen_inicio: true,  // (Antes era imagen_intro)
-        url_imagen_nudo: true,    // (Antes era imagen_nudo)
-        url_imagen_desenlace: true // (Antes era imagen_desenlace)
+        url_imagen_inicio: true,
+        url_imagen_nudo: true,
+        url_imagen_desenlace: true
       }
     });
 
-    if (!tema) {
-      return res.status(404).json({ error: 'Tema no encontrado.' });
-    }
+    if (!tema) return res.status(404).json({ error: 'Tema no encontrado.' });
 
     res.json(tema);
 
@@ -38,9 +35,8 @@ exports.getTemaById = async (req, res) => {
   }
 };
 
-
 // ============================================================
-// GET /api/temas/:id/lecciones (Esta función ya la tenías)
+// GET /api/temas/:id/lecciones
 // ============================================================
 exports.getLeccionesPorTema = async (req, res) => {
   const temaId = Number(req.params.id);
@@ -51,22 +47,172 @@ exports.getLeccionesPorTema = async (req, res) => {
       include: {
         lecciones: {
           orderBy: { orden: 'asc' },
-          select: {
-            id: true,
-            titulo_leccion: true,
-            orden: true,
-          },
-        },
-      },
+          select: { id: true, titulo_leccion: true, orden: true }
+        }
+      }
     });
 
-    if (!temaConLecciones) {
+    if (!temaConLecciones)
       return res.status(404).json({ error: 'Tema no encontrado.' });
-    }
 
     res.json(temaConLecciones.lecciones);
+
   } catch (error) {
     console.error('❌ Error al obtener las lecciones del tema:', error);
     res.status(500).json({ error: 'Error al obtener las lecciones.' });
+  }
+};
+
+// ============================================================
+// POST /api/temas → Crear tema con imágenes
+// ============================================================
+exports.createTema = async (req, res) => {
+  const {
+    curso_id,
+    nombre_tema,
+    orden,
+    titulo_pregunta,
+    historia_introduccion,
+    historia_nudo,
+    historia_desenlace
+  } = req.body;
+
+  const files = req.files || {};
+
+  if (!curso_id || !nombre_tema || !orden) {
+    return res.status(400).json({
+      error: 'Faltan datos obligatorios (curso_id, nombre_tema, orden).'
+    });
+  }
+
+  try {
+    const baseUrl = '/historias/';
+
+    const imgInicio = files.imagen_inicio
+      ? baseUrl + files.imagen_inicio[0].filename
+      : null;
+
+    const imgNudo = files.imagen_nudo
+      ? baseUrl + files.imagen_nudo[0].filename
+      : null;
+
+    const imgDesenlace = files.imagen_desenlace
+      ? baseUrl + files.imagen_desenlace[0].filename
+      : null;
+
+    const nuevoTema = await prisma.temas.create({
+      data: {
+        curso_id: Number(curso_id),
+        nombre_tema,
+        orden: Number(orden),
+        titulo_pregunta,
+        historia_introduccion,
+        historia_nudo,
+        historia_desenlace,
+        url_imagen_inicio: imgInicio,
+        url_imagen_nudo: imgNudo,
+        url_imagen_desenlace: imgDesenlace
+      }
+    });
+
+    res.status(201).json(nuevoTema);
+
+  } catch (error) {
+    console.error('ERROR CREAR TEMA:', error);
+    res.status(500).json({ error: 'Error al crear el tema.' });
+  }
+};
+
+// ============================================================
+// PUT /api/temas/:id → Actualizar tema e imágenes
+// ============================================================
+exports.updateTema = async (req, res) => {
+  const { id } = req.params;
+  const {
+    nombre_tema,
+    orden,
+    titulo_pregunta,
+    historia_introduccion,
+    historia_nudo,
+    historia_desenlace
+  } = req.body;
+
+  const files = req.files || {};
+
+  try {
+    const temaExistente = await prisma.temas.findUnique({
+      where: { id: Number(id) }
+    });
+
+    if (!temaExistente)
+      return res.status(404).json({ error: 'Tema no encontrado.' });
+
+    // Función para reemplazar imágenes
+    const getNewUrl = (fieldKey, oldUrl) => {
+      if (files[fieldKey]) {
+        if (oldUrl) {
+          const oldPath = path.join(__dirname, '../../public', oldUrl);
+          if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+        }
+        return '/historias/' + files[fieldKey][0].filename;
+      }
+      return oldUrl;
+    };
+
+    const imgInicio = getNewUrl('imagen_inicio', temaExistente.url_imagen_inicio);
+    const imgNudo = getNewUrl('imagen_nudo', temaExistente.url_imagen_nudo);
+    const imgDesenlace = getNewUrl('imagen_desenlace', temaExistente.url_imagen_desenlace);
+
+    const actualizado = await prisma.temas.update({
+      where: { id: Number(id) },
+      data: {
+        nombre_tema,
+        orden: orden ? Number(orden) : undefined,
+        titulo_pregunta,
+        historia_introduccion,
+        historia_nudo,
+        historia_desenlace,
+        url_imagen_inicio: imgInicio,
+        url_imagen_nudo: imgNudo,
+        url_imagen_desenlace: imgDesenlace
+      }
+    });
+
+    res.json(actualizado);
+
+  } catch (error) {
+    console.error('ERROR UPDATE TEMA:', error);
+    res.status(500).json({ error: 'Error al actualizar tema.' });
+  }
+};
+
+// ============================================================
+// DELETE /api/temas/:id
+// ============================================================
+exports.deleteTema = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const tema = await prisma.temas.findUnique({
+      where: { id: Number(id) }
+    });
+
+    if (tema) {
+      [tema.url_imagen_inicio, tema.url_imagen_nudo, tema.url_imagen_desenlace].forEach((url) => {
+        if (url) {
+          const filePath = path.join(__dirname, '../../public', url);
+          if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+        }
+      });
+    }
+
+    await prisma.temas.delete({ where: { id: Number(id) } });
+
+    res.json({ message: 'Tema eliminado.' });
+
+  } catch (error) {
+    res.status(500).json({
+      error: 'Error al eliminar tema (posiblemente tiene lecciones asociadas).'
+    });
   }
 };

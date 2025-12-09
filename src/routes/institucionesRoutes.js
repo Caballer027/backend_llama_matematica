@@ -1,73 +1,143 @@
+// src/routes/institucionesRoutes.js
 const express = require('express');
 const router = express.Router();
 const institucionesController = require('../controllers/institucionesController');
+const authMiddleware = require('../middleware/authMiddleware');
+const roleMiddleware = require('../middleware/roleMiddleware');
 
 /**
  * @swagger
  * tags:
  *   name: Instituciones
- *   description: Endpoints para obtener información de instituciones y sus carreras.
+ *   description: Gestión de instituciones educativas.
  */
 
+// ============================================================
+// GET /instituciones — Público
+// ============================================================
 /**
  * @swagger
  * /instituciones:
  *   get:
- *     summary: Obtiene la lista de todas las instituciones disponibles
+ *     summary: Lista todas las instituciones
  *     tags: [Instituciones]
- *     description: Retorna todas las instituciones registradas en la base de datos.
  *     responses:
  *       200:
- *         description: Lista de instituciones obtenida correctamente.
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items:
- *                 type: object
- *                 properties:
- *                   id:
- *                     type: integer
- *                     example: 1
- *                   nombre_institucion:
- *                     type: string
- *                     example: "TECSUP Lima"
+ *         description: Lista obtenida correctamente.
  */
 router.get('/', institucionesController.getInstituciones);
 
+// ============================================================
+// 🔥 CRUD ADMIN (POST - PUT - DELETE)
+// ============================================================
+
 /**
  * @swagger
- * /instituciones/{id}/carreras:
- *   get:
- *     summary: Obtiene las carreras asociadas a una institución
+ * /instituciones:
+ *   post:
+ *     summary: Crear una nueva institución
  *     tags: [Instituciones]
- *     description: Devuelve todas las carreras pertenecientes a una institución específica.
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - nombre
+ *             properties:
+ *               nombre:
+ *                 type: string
+ *                 example: "TECSUP Lima"
+ *               dominio_correo:
+ *                 type: string
+ *                 example: "tecsup.edu.pe"
+ *     responses:
+ *       201:
+ *         description: Institución creada exitosamente.
+ *       400:
+ *         description: Faltan datos requeridos.
+ *       409:
+ *         description: Ya existe una institución con ese nombre.
+ */
+router.post(
+  '/',
+  authMiddleware,
+  roleMiddleware.isAdmin,
+  institucionesController.createInstitucion
+);
+
+/**
+ * @swagger
+ * /instituciones/{id}:
+ *   put:
+ *     summary: Actualizar una institución
+ *     tags: [Instituciones]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
- *       - in: path
- *         name: id
+ *       - name: id
+ *         in: path
  *         required: true
  *         schema:
  *           type: integer
- *         description: ID de la institución.
+ *         description: ID de la institución a actualizar
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               nombre:
+ *                 type: string
+ *                 example: "TECSUP Arequipa"
+ *               dominio_correo:
+ *                 type: string
+ *                 example: "tecsup.edu.pe"
  *     responses:
  *       200:
- *         description: Lista de carreras obtenida correctamente.
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items:
- *                 type: object
- *                 properties:
- *                   id:
- *                     type: integer
- *                     example: 10
- *                   nombre_carrera:
- *                     type: string
- *                     example: "Ingeniería de Software"
+ *         description: Institución actualizada correctamente.
  *       404:
  *         description: Institución no encontrada.
  */
-router.get('/:id/carreras', institucionesController.getCarrerasByInstitucion);
+router.put(
+  '/:id',
+  authMiddleware,
+  roleMiddleware.isAdmin,
+  institucionesController.updateInstitucion
+);
+
+/**
+ * @swagger
+ * /instituciones/{id}:
+ *   delete:
+ *     summary: Eliminar una institución
+ *     tags: [Instituciones]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID de la institución a eliminar
+ *     responses:
+ *       200:
+ *         description: Institución eliminada correctamente.
+ *       404:
+ *         description: Institución no encontrada.
+ *       400:
+ *         description: No se pudo eliminar (tiene datos asociados).
+ */
+router.delete(
+  '/:id',
+  authMiddleware,
+  roleMiddleware.isAdmin,
+  institucionesController.deleteInstitucion
+);
 
 module.exports = router;

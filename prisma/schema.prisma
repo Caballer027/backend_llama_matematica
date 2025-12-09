@@ -7,46 +7,51 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// =======================
+// ENUMS
+// =======================
 enum preguntas_tipo_pregunta {
   opcion_multiple
   verdadero_falso
   respuesta_abierta
+  seleccionar_imagen
 }
 
+// =======================
+// MODELOS ESTRUCTURALES
+// =======================
+
 model roles {
-  id          Int      @id @default(autoincrement())
-  nombre_rol  String   @unique @db.VarChar(50)
-  usuarios    usuarios[]
+  id         Int        @id @default(autoincrement())
+  nombre_rol String     @unique @db.VarChar(50)
+  usuarios   usuarios[]
 }
 
 model institucion {
-  id              Int        @id @default(autoincrement())
-  nombre          String     @unique @db.VarChar(100)
-  dominio_correo  String?    @db.VarChar(100)
-  carreras        carrera[]
-  // ✅ CORRECCIÓN: Relación inversa añadida para periodos_academicos
+  id                  Int                   @id @default(autoincrement())
+  nombre              String                @unique @db.VarChar(100)
+  dominio_correo      String?               @db.VarChar(100)
+  carreras            carrera[]
   periodos_academicos periodos_academicos[]
-  // ✅ CORRECCIÓN: Relación inversa añadida para usuarios
-  usuarios        usuarios[] 
+  usuarios            usuarios[]
 }
 
 model carrera {
   id             Int           @id @default(autoincrement())
   nombre         String        @unique @db.VarChar(100)
+  institucion_id Int
+  institucion    institucion   @relation(fields: [institucion_id], references: [id])
   ciclos         carrera_ciclo[]
   usuarios       usuarios[]
-  institucion_id Int
-  institucion    institucion @relation(fields: [institucion_id], references: [id])
 }
 
 model ciclo {
-  id         Int             @id @default(autoincrement())
-  nombre     String          @unique @db.VarChar(100)
-  numero     Int
-  carreras   carrera_ciclo[]
-  usuarios   usuarios[] @relation("CicloActualUsuario")
-  // ✅ CORRECCIÓN: Relación inversa añadida para cursos
-  cursos     cursos[]
+  id       Int             @id @default(autoincrement())
+  nombre   String          @unique @db.VarChar(100)
+  numero   Int
+  carreras carrera_ciclo[]
+  usuarios usuarios[]      @relation("CicloActualUsuario")
+  cursos   cursos[]
 }
 
 model carrera_ciclo {
@@ -59,32 +64,28 @@ model carrera_ciclo {
 }
 
 model periodos_academicos {
-  id             Int           @id @default(autoincrement())
-  nombre_periodo String        @unique @db.VarChar(20)
-  fecha_inicio   DateTime      @db.Date
-  fecha_fin      DateTime      @db.Date
+  id             Int         @id @default(autoincrement())
+  nombre_periodo String      @unique @db.VarChar(20)
+  fecha_inicio   DateTime    @db.Date
+  fecha_fin      DateTime    @db.Date
   institucion_id Int
-  // CORRECCIÓN 3 aplicada: institucion
-  institucion    institucion   @relation(fields: [institucion_id], references: [id]) 
+  institucion    institucion @relation(fields: [institucion_id], references: [id])
   usuarios       usuarios[]
 
   @@index([institucion_id])
 }
 
+// =======================
+// MODELOS TIENDA Y JUEGO
+// =======================
+
 model personajes {
-  id              Int      @id @default(autoincrement())
-  nombre          String   @db.VarChar(100) // Ya no es @unique. Es el nombre base del personaje (ej. BRIZALI)
-  
-  // Clave que usará Flutter para saber qué personaje es (ej: 'LEON')
-  asset_key       String   @unique @db.VarChar(50) 
-  
-  // URL de la imagen base 
-  url_imagen_base String?  @db.VarChar(255) 
-
-  // Nuevos mensajes motivacionales
-  mensaje_corta   String?  @db.VarChar(255) // Para títulos o descripciones breves (ej: "Cada problema que resuelves...")
-  mensaje_larga   String?  @db.Text         // Para la caja de texto grande (ej: "Siempre creyó que cada problema...")
-
+  id              Int        @id @default(autoincrement())
+  nombre          String     @db.VarChar(100)
+  asset_key       String     @unique @db.VarChar(50)
+  url_imagen_base String?    @db.VarChar(255)
+  mensaje_corta   String?    @db.VarChar(255)
+  mensaje_larga   String?    @db.Text
   usuarios        usuarios[]
 }
 
@@ -92,65 +93,63 @@ model tipos_item {
   id          Int              @id @default(autoincrement())
   nombre_tipo String           @unique @db.VarChar(100)
   items       items[]
-  equipo      equipo_usuario[] // relación inversa agregada
+  equipo      equipo_usuario[]
 }
 
 model items {
-  id                       Int      @id @default(autoincrement())
-  tipo_item_id             Int
-  nombre_item              String   @unique @db.VarChar(100) 
-  descripcion              String?  @db.Text
-  costo_gemas              Int      @default(0) 
-  
-  // URL del ícono para la rejilla de la tienda (ej: 'http://localhost:3000/images/polo_1.png')
-  url_icono_tienda         String?  @db.VarChar(255)
-  
-  // ÍNDICE (1 a 6) para ordenar y conectar con el número de polo
-  asset_index              Int?     @unique 
-  
-  // JSON que mapea la clave del personaje a la URL equipada
-  // Ejemplo: { "LEON": "http://localhost:3000/images/leon_polo_1.png", ... }
-  url_imagenes_equipado    Json? 
-
-  tipos_item               tipos_item @relation(fields: [tipo_item_id], references: [id])
-  inventario               inventario_usuario[]
-  equipo                   equipo_usuario[] // Relación para el inventario y equipo
+  id                    Int                  @id @default(autoincrement())
+  tipo_item_id          Int
+  nombre_item           String               @unique @db.VarChar(100)
+  descripcion           String?              @db.Text
+  costo_gemas           Int                  @default(0)
+  url_icono_tienda      String?              @db.VarChar(255)
+  asset_index           Int?                 @unique
+  url_imagenes_equipado Json?
+  tipos_item            tipos_item           @relation(fields: [tipo_item_id], references: [id])
+  inventario            inventario_usuario[]
+  equipo                equipo_usuario[]
 
   @@index([tipo_item_id])
 }
 
+// =======================
+// USUARIOS
+// =======================
+
 model usuarios {
-  id                       BigInt                 @id @default(autoincrement())
-  nombre                   String                 @db.VarChar(100)
-  apellido                 String                 @db.VarChar(100)
-  correo_electronico       String                 @unique @db.VarChar(255)
-  hash_contrasena          String                 @db.VarChar(255)
-  institucion_id           Int
-  carrera_id               Int
-  ciclo_actual_id          Int
+  id                       BigInt    @id @default(autoincrement())
+  nombre                   String    @db.VarChar(100)
+  apellido                 String    @db.VarChar(100)
+  correo_electronico       String    @unique @db.VarChar(255)
+  hash_contrasena          String?   @db.VarChar(255)
+  
+  institucion_id           Int?
+  carrera_id               Int?
+  ciclo_actual_id          Int?
+  ano_ingreso              Int?
+  fecha_nacimiento         DateTime?
   rol_id                   Int
-  ano_ingreso              Int
-  fecha_nacimiento         DateTime
   periodo_actual_id        Int?
-  puntos_experiencia       Int                    @default(0)
-  gemas                    Int                    @default(0)
-  nombre_personaje_usuario String?                @db.VarChar(100)
+  
+  puntos_experiencia       Int       @default(0)
+  gemas                    Int       @default(0)
+  nombre_personaje_usuario String?   @db.VarChar(100)
   personaje_activo_id      Int?
-  fecha_creacion           DateTime               @default(now())
+  fecha_creacion           DateTime  @default(now())
 
-  // CORRECCIÓN aplicada
-  institucion              institucion            @relation(fields: [institucion_id], references: [id])
-  carrera                  carrera?               @relation(fields: [carrera_id], references: [id])
-  ciclo_actual             ciclo?                 @relation("CicloActualUsuario", fields: [ciclo_actual_id], references: [id])
-  rol                      roles                  @relation(fields: [rol_id], references: [id])
-  personaje_activo         personajes?            @relation(fields: [personaje_activo_id], references: [id])
-  periodo_actual           periodos_academicos?   @relation(fields: [periodo_actual_id], references: [id])
+  institucion      institucion?         @relation(fields: [institucion_id], references: [id])
+  carrera          carrera?             @relation(fields: [carrera_id], references: [id])
+  ciclo_actual     ciclo?               @relation("CicloActualUsuario", fields: [ciclo_actual_id], references: [id])
+  rol              roles                @relation(fields: [rol_id], references: [id])
+  personaje_activo personajes?          @relation(fields: [personaje_activo_id], references: [id])
+  periodo_actual   periodos_academicos? @relation(fields: [periodo_actual_id], references: [id])
 
-  intentos_usuario         intentos_usuario[]
+  intentos_usuario           intentos_usuario[]
   progreso_lecciones_usuario progreso_lecciones_usuario[]
-  inventario               inventario_usuario[]
-  equipo                   equipo_usuario[]
-  quiz_sessions            quiz_session[]
+  inventario                 inventario_usuario[]
+  equipo                     equipo_usuario[]
+  quiz_sessions              quiz_session[]
+  cursos_que_dicta           profesor_curso[] 
 
   @@index([carrera_id])
   @@index([ciclo_actual_id])
@@ -158,51 +157,67 @@ model usuarios {
   @@index([rol_id])
 }
 
+// =======================
+// ACADÉMICO
+// =======================
+
 model cursos {
-  id           Int      @id @default(autoincrement())
-  nombre_curso String   @db.VarChar(200)
-  descripcion  String?  @db.Text
+  id           Int              @id @default(autoincrement())
+  nombre_curso String           @db.VarChar(200)
+  descripcion  String?          @db.Text
   ciclo_id     Int
-  // CORRECCIÓN 4 aplicada: cursos_ciclo
-  cursos_ciclo ciclo    @relation(fields: [ciclo_id], references: [id])
+  cursos_ciclo ciclo            @relation(fields: [ciclo_id], references: [id])
   temas        temas[]
+  profesores   profesor_curso[]
 
   @@unique([ciclo_id, nombre_curso], map: "ciclo_id_nombre_curso_uq")
   @@index([ciclo_id])
 }
 
-model temas {
-  id                    Int      @id @default(autoincrement())
-  curso_id              Int
-  nombre_tema           String   @db.VarChar(150)
-  orden                 Int
-  titulo_pregunta       String?  @db.VarChar(255)
-  historia_introduccion String?  @db.Text
-  historia_nudo         String?  @db.Text
-  historia_desenlace    String?  @db.Text
-  url_imagen_inicio     String?  @db.VarChar(255)
-  url_imagen_nudo       String?  @db.VarChar(255)
-  url_imagen_desenlace  String?  @db.VarChar(255)
+model profesor_curso {
+  usuario_id  BigInt
+  curso_id    Int
+  asignado_en DateTime @default(now())
+  usuario     usuarios @relation(fields: [usuario_id], references: [id])
+  curso       cursos   @relation(fields: [curso_id], references: [id])
 
-  cursos    cursos     @relation(fields: [curso_id], references: [id])
-  lecciones lecciones[]
+  @@id([usuario_id, curso_id])
+}
+
+model temas {
+  id                    Int         @id @default(autoincrement())
+  curso_id              Int
+  nombre_tema           String      @db.VarChar(150)
+  orden                 Int
+  titulo_pregunta       String?     @db.VarChar(255)
+  historia_introduccion String?     @db.Text
+  historia_nudo         String?     @db.Text
+  historia_desenlace    String?     @db.Text
+  url_imagen_inicio     String?     @db.VarChar(255)
+  url_imagen_nudo       String?     @db.VarChar(255)
+  url_imagen_desenlace  String?     @db.VarChar(255)
+  cursos                cursos      @relation(fields: [curso_id], references: [id])
+  lecciones             lecciones[]
 
   @@unique([curso_id, orden], map: "idx_orden_tema_curso_unico")
   @@index([curso_id])
 }
 
 model lecciones {
-  id                        Int                          @id @default(autoincrement())
-  tema_id                   Int
-  titulo_leccion            String                       @db.VarChar(200)
-  contenido_teorico         String?                      @db.Text
-  historia_introductoria    String?                      @db.Text
-  orden                     Int
-  tiempo_limite_segundos    Int?
-  temas                     temas                        @relation(fields: [tema_id], references: [id])
-  preguntas                 preguntas[]
+  id                     Int     @id @default(autoincrement())
+  tema_id                Int
+  titulo_leccion         String  @db.VarChar(200)
+  orden                  Int
+  tiempo_limite_segundos Int?    @default(1200)
+  puntos_experiencia     Int     @default(100)
+  gemas                  Int     @default(100)
+
+  // 🔥 NOTA: Se borraron contenido_teorico e historia_introductoria
+
+  temas                      temas                        @relation(fields: [tema_id], references: [id])
+  preguntas                  preguntas[]
   progreso_lecciones_usuario progreso_lecciones_usuario[]
-  quiz_session              quiz_session[]
+  quiz_session               quiz_session[]
 
   @@unique([tema_id, orden], map: "tema_id_orden_uq")
   @@index([tema_id])
@@ -212,69 +227,73 @@ model preguntas {
   id                         Int                     @id @default(autoincrement())
   leccion_id                 Int
   enunciado_pregunta         String                  @db.Text
-  puntos_otorgados           Int                     @default(10)
+  url_imagen_pregunta        String?                 @db.VarChar(255)
+  puntos_otorgados           Int                     @default(5) // Default ajustado a 5 pts
   tipo_pregunta              preguntas_tipo_pregunta
   respuesta_correcta_abierta String?                 @db.Text
   pasos_guia                 Json?
-  lecciones                  lecciones               @relation(fields: [leccion_id], references: [id])
-  opciones_respuesta         opciones_respuesta[]
-  intentos_usuario           intentos_usuario[]
-  errores_ejercicio          error_ejercicio[]
+
+  lecciones          lecciones            @relation(fields: [leccion_id], references: [id])
+  opciones_respuesta opciones_respuesta[]
+  intentos_usuario   intentos_usuario[]
+  errores_ejercicio  error_ejercicio[]
 
   @@index([leccion_id])
 }
 
 model opciones_respuesta {
-  id                     Int                @id @default(autoincrement())
-  pregunta_id            Int
-  texto_respuesta        String             @db.VarChar(255)
-  es_correcta            Boolean            @default(false)
-  preguntas              preguntas          @relation(fields: [pregunta_id], references: [id], onDelete: Cascade)
-  intentos_usuario       intentos_usuario[]
+  id               Int                @id @default(autoincrement())
+  pregunta_id      Int
+  texto_respuesta  String?            @db.VarChar(255)
+  url_imagen       String?            @db.VarChar(255)
+  es_correcta      Boolean            @default(false)
+  preguntas        preguntas          @relation(fields: [pregunta_id], references: [id], onDelete: Cascade)
+  intentos_usuario intentos_usuario[]
 
   @@index([pregunta_id])
 }
 
+// =======================
+// TRANSACCIONALES
+// =======================
+
 model intentos_usuario {
-  id                     BigInt   @id @default(autoincrement()) // <-- CORREGIDO (era Int)
+  id                     BigInt              @id @default(autoincrement())
   usuario_id             BigInt
   pregunta_id            Int
   opcion_seleccionada_id Int?
-  respuesta_abierta      String?  @db.Text
+  respuesta_abierta      String?             @db.Text
   es_correcta            Boolean
-  fecha_intento          DateTime @default(now())
-  acepto_guia            Boolean  @default(false)
+  fecha_intento          DateTime            @default(now())
+  acepto_guia            Boolean             @default(false)
   tiempo_restante        Int?
-  xp_ganada              Int      @default(0)
-  quiz_session_id        BigInt   // Para enlazar al quiz
-
-  usuarios             usuarios             @relation(fields: [usuario_id], references: [id])
-  preguntas            preguntas            @relation(fields: [pregunta_id], references: [id])
-  opciones_respuesta   opciones_respuesta?  @relation(fields: [opcion_seleccionada_id], references: [id])
-  quiz_session         quiz_session         @relation(fields: [quiz_session_id], references: [id])
+  xp_ganada              Int                 @default(0)
+  quiz_session_id        BigInt
+  usuarios               usuarios            @relation(fields: [usuario_id], references: [id])
+  preguntas              preguntas           @relation(fields: [pregunta_id], references: [id])
+  opciones_respuesta     opciones_respuesta? @relation(fields: [opcion_seleccionada_id], references: [id])
+  quiz_session           quiz_session        @relation(fields: [quiz_session_id], references: [id])
 
   @@index([usuario_id])
   @@index([pregunta_id])
-  @@index([opcion_seleccionada_id])
-  @@index([quiz_session_id]) // <-- Índice añadido
+  @@index([quiz_session_id])
 }
 
 model progreso_lecciones_usuario {
-  id            BigInt   @id @default(autoincrement()) // <-- CORREGIDO (era Int)
+  id            BigInt         @id @default(autoincrement())
   usuario_id    BigInt
   leccion_id    Int
-  estado        String   @default("no_iniciado")
+  estado        String         @default("no_iniciado")
   puntaje_total Int?
-  xp_ganada     Int      @default(0)
-  gemas_ganadas Int      @default(0)
-  intentos      Int      @default(0)
+  xp_ganada     Int            @default(0)
+  gemas_ganadas Int            @default(0)
+  intentos      Int            @default(0)
   feedback_ia   feedback_ia?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
   quiz_sessions quiz_session[]
-
-  usuarios  usuarios  @relation(fields: [usuario_id], references: [id])
-  lecciones lecciones @relation(fields: [leccion_id], references: [id])
+  usuarios      usuarios       @relation(fields: [usuario_id], references: [id])
+  lecciones     lecciones      @relation(fields: [leccion_id], references: [id])
 
   @@unique([usuario_id, leccion_id], map: "idx_progreso_unico")
 }
@@ -305,64 +324,48 @@ model equipo_usuario {
 }
 
 model quiz_session {
-  id                     BigInt   @id @default(autoincrement())
+  id                     BigInt                     @id @default(autoincrement())
   usuario_id             BigInt
   leccion_id             Int
   progreso_leccion_id    BigInt
   tiempo_limite_segundos Int
   expires_at             DateTime
-  fecha_inicio           DateTime @default(now())
-
-  // --- 👇 CAMPOS AÑADIDOS ---
-  // (Para guardar el resultado de ESTE intento)
-  estado                 String   @default("en_progreso") @db.VarChar(50)
-  puntaje_obtenido       Int      @default(0)
-  xp_obtenida            Int      @default(0)
-  gemas_obtenidas        Int      @default(0)
-  // -------------------------
-
-  usuario            usuarios                   @relation(fields: [usuario_id], references: [id])
-  leccion            lecciones                  @relation(fields: [leccion_id], references: [id])
-  progreso_leccion   progreso_lecciones_usuario @relation(fields: [progreso_leccion_id], references: [id])
-  intentos           intentos_usuario[]
+  fecha_inicio           DateTime                   @default(now())
+  estado                 String                     @default("en_progreso") @db.VarChar(50)
+  puntaje_obtenido       Int                        @default(0)
+  xp_obtenida            Int                        @default(0)
+  gemas_obtenidas        Int                        @default(0)
+  usuario                usuarios                   @relation(fields: [usuario_id], references: [id])
+  leccion                lecciones                  @relation(fields: [leccion_id], references: [id])
+  progreso_leccion       progreso_lecciones_usuario @relation(fields: [progreso_leccion_id], references: [id])
+  intentos               intentos_usuario[]
 
   @@index([usuario_id])
   @@index([leccion_id])
   @@index([progreso_leccion_id])
 }
 
-model mensajes_motivacionales {
-  id            Int      @id @default(autoincrement())
-  tipo          String   @db.VarChar(50)
-  texto_mensaje String   @unique @db.VarChar(255)
-  createdAt     DateTime @default(now())
-
-  @@index([tipo])
-}
+// =======================
+// IA y FEEDBACK
+// =======================
 
 model feedback_ia {
-  id                    BigInt      @id @default(autoincrement())
-  progreso_leccion_id   BigInt      @unique // Relación 1-a-1 con el progreso macro
-  contenido_feedback    Json     // Guardará { puntosFuertes: "...", areasMejora: "..." }
-  fecha_generacion      DateTime @default(now())
-
-  // Relación con el progreso del usuario
+  id                     BigInt                     @id @default(autoincrement())
+  progreso_leccion_id    BigInt                     @unique
+  contenido_feedback     Json
+  fecha_generacion       DateTime                   @default(now())
   progreso_lecciones_usuario progreso_lecciones_usuario @relation(fields: [progreso_leccion_id], references: [id], onDelete: Cascade)
-  
-  // Relación con los errores específicos (1-a-Muchos)
-  errores_ejercicios  error_ejercicio[]
+  errores_ejercicios     error_ejercicio[]
 }
 
 model error_ejercicio {
-  id            BigInt    @id @default(autoincrement()) // <-- CORREGIDO (era Int)
-  feedback_id   BigInt    // <-- ¡CORREGIDO! (era Int)
-  pregunta_id   Int       // (Se mantiene Int, asumiendo que preguntas.id es Int)
-  detalle_json  Json
-  fecha_creacion DateTime @default(now())
-
-  // Relaciones
-  feedback      feedback_ia @relation(fields: [feedback_id], references: [id], onDelete: Cascade)
-  pregunta      preguntas   @relation(fields: [pregunta_id], references: [id])
+  id             BigInt      @id @default(autoincrement())
+  feedback_id    BigInt
+  pregunta_id    Int
+  detalle_json   Json
+  fecha_creacion DateTime    @default(now())
+  feedback       feedback_ia @relation(fields: [feedback_id], references: [id], onDelete: Cascade)
+  pregunta       preguntas   @relation(fields: [pregunta_id], references: [id])
 
   @@index([feedback_id])
   @@index([pregunta_id])

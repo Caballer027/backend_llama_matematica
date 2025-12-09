@@ -1,18 +1,38 @@
-// src/controllers/authController.js (VERSIÓN ACTUALIZADA CON CICLOS)
+// src/controllers/authController.js
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
-// --- REGISTRO DE USUARIO ---
-exports.register = async (req, res) => {
-  // --- CAMBIO: Añadido 'ciclo_actual_id' ---
-  const { nombre, apellido, correo_electronico, contrasena, fecha_nacimiento, carrera_id, ano_ingreso, ciclo_actual_id } = req.body;
+// ============================================================
+// Función auxiliar para generar Token (DRY)
+// ============================================================
+const generarToken = (id, rol_id) => {
+  return jwt.sign(
+    { usuario: { id: id.toString(), rol: rol_id } },
+    process.env.JWT_SECRET,
+    { expiresIn: '30d' }
+  );
+};
 
-  // --- CAMBIO: Añadido a la validación ---
+// ============================================================
+// 1. REGISTRO MANUAL
+// ============================================================
+exports.register = async (req, res) => {
+  const { 
+    nombre, 
+    apellido, 
+    correo_electronico, 
+    contrasena, 
+    fecha_nacimiento, 
+    carrera_id, 
+    ano_ingreso, 
+    ciclo_actual_id 
+  } = req.body;
+
   if (!correo_electronico || !contrasena || !nombre || !ano_ingreso || !carrera_id || !ciclo_actual_id) {
     return res.status(400).json({
-      error: 'Faltan campos requeridos. Revisa que las claves en Postman sean correctas (nombre, correo, contrasena, ano_ingreso, carrera_id, ciclo_actual_id).'
+      error: 'Faltan campos requeridos.'
     });
   }
 
@@ -36,36 +56,41 @@ exports.register = async (req, res) => {
         fecha_nacimiento: new Date(fecha_nacimiento),
         carrera_id: Number(carrera_id),
         ano_ingreso: Number(ano_ingreso),
-        ciclo_actual_id: Number(ciclo_actual_id), // --- CAMBIO: Guardamos el ciclo ---
+        ciclo_actual_id: Number(ciclo_actual_id),
         rol_id: rolEstudiante.id,
         institucion_id: tecsup.id,
+        personaje_activo_id: 1
       },
     });
 
-    // --- CORRECCIÓN FINAL PARA EL ERROR 'BigInt' ---
     const usuarioParaRespuesta = {
       ...nuevoUsuario,
-      id: nuevoUsuario.id.toString(), // Convertimos el BigInt a un string
+      id: nuevoUsuario.id.toString()
     };
     delete usuarioParaRespuesta.hash_contrasena;
 
-    res.status(201).json({ message: '¡Usuario registrado con éxito!', usuario: usuarioParaRespuesta });
+    res.status(201).json({ 
+      message: '¡Usuario registrado con éxito!', 
+      usuario: usuarioParaRespuesta 
+    });
 
   } catch (error) {
     console.error('ERROR EN REGISTRO:', error);
+
     if (error.code === 'P2002') {
       return res.status(409).json({ error: 'Este correo electrónico ya está registrado.' });
     }
-    // Error si el ciclo_actual_id o carrera_id no existen
-    if (error.code === 'P2003') { 
+    if (error.code === 'P2003') {
       return res.status(400).json({ error: 'El ID de carrera o ID de ciclo no es válido.' });
     }
+
     res.status(500).json({ error: 'Error interno al registrar el usuario.' });
   }
 };
 
-
-// --- LOGIN DE USUARIO (Sin cambios) ---
+// ============================================================
+// 2. LOGIN TRADICIONAL (Corregido con retorno de usuario completo)
+// ============================================================
 exports.login = async (req, res) => {
   const { correo_electronico, contrasena } = req.body;
 
@@ -75,10 +100,10 @@ exports.login = async (req, res) => {
 
   try {
     const usuario = await prisma.usuarios.findUnique({
-      where: { correo_electronico },
+      where: { correo_electronico }
     });
 
-    if (!usuario) {
+    if (!usuario || !usuario.hash_contrasena) {
       return res.status(401).json({ error: 'Correo o contraseña incorrectos.' });
     }
 
@@ -88,25 +113,84 @@ exports.login = async (req, res) => {
       return res.status(401).json({ error: 'Correo o contraseña incorrectos.' });
     }
 
-    const payload = {
+    // Generar Token
+    const token = generarToken(usuario.id, usuario.rol_id);
+
+    // *** CORRECCIÓN AQUÍ → retornar usuario ***
+    res.json({
+      message: '¡Inicio de sesión exitoso!',
+      token,
       usuario: {
-        id: usuario.id.toString(), // También convertimos aquí
+        id: usuario.id.toString(),
+        nombre: usuario.nombre,
+        apellido: usuario.apellido,
+        email: usuario.correo_electronico,
         rol: usuario.rol_id
       },
-    };
-
-    jwt.sign(
-      payload,
-      process.env.JWT_SECRET,
-      { expiresIn: '1d' },
-      (error, token) => {
-        if (error) throw error;
-        res.json({ message: '¡Inicio de sesión exitoso!', token });
-      }
-    );
+      rol: usuario.rol_id
+    });
 
   } catch (error) {
     console.error('ERROR EN LOGIN:', error);
     res.status(500).json({ error: 'Error interno en el servidor.' });
+  }
+};
+
+// ============================================================
+// 3. LOGIN CON GOOGLE
+// ============================================================
+exports.googleLogin = async (req, res) => {
+  const { email, displayName, photoUrl } = req.body;
+
+  if (!email) return res.status(400).json({ error: 'Falta el email de Google.' });
+
+  try {
+    // Buscar si ya existe
+    let usuario = await prisma.usuarios.findUnique({
+      where: { correo_electronico: email }
+    });
+
+    // Si no existe → crear usuario básico
+    if (!usuario) {
+      const rolEstudiante = await prisma.roles.findUnique({ where: { nombre_rol: 'Estudiante' } });
+      const tecsup = await prisma.institucion.findUnique({ where: { nombre: 'Tecsup' } });
+
+      const partes = displayName ? displayName.split(' ') : ['Usuario', 'Google'];
+      const apellido = partes.length > 1 ? partes.pop() : '';
+      const nombre = partes.join(' ');
+
+      usuario = await prisma.usuarios.create({
+        data: {
+          nombre,
+          apellido,
+          correo_electronico: email,
+          rol_id: rolEstudiante.id,
+          institucion_id: tecsup ? tecsup.id : undefined,
+          personaje_activo_id: 1,
+          gemas: 0,
+          puntos_experiencia: 0
+        }
+      });
+    }
+
+    // Generar Token
+    const token = generarToken(usuario.id, usuario.rol_id);
+
+    res.json({
+      message: 'Login Google exitoso',
+      token,
+      usuario: {
+        id: usuario.id.toString(),
+        nombre: usuario.nombre,
+        apellido: usuario.apellido,
+        email: usuario.correo_electronico,
+        rol: usuario.rol_id,
+        es_nuevo: usuario.carrera_id == null
+      }
+    });
+
+  } catch (error) {
+    console.error('ERROR GOOGLE LOGIN:', error);
+    res.status(500).json({ error: 'Error al procesar login con Google.' });
   }
 };

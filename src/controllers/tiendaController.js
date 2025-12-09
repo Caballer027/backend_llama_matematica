@@ -1,109 +1,288 @@
-// src/controllers/tiendaController.js (VERSIÓN 3.0)
+// ============================================================================
+// src/controllers/tiendaController.js — VERSIÓN COMPLETA 6.0 (DINÁMICA)
+// ============================================================================
 const prisma = require('../prismaClient');
+const path = require('path');
+const fs = require('fs');
 
-// ============================================================
-// GET /api/tienda/items
-// ¡ACTUALIZADO! Para seleccionar solo los campos necesarios
-// ============================================================
+// ============================================================================
+// GET /api/tienda/items — PUBLIC / ADMIN
+// ============================================================================
 exports.getItems = async (req, res) => {
   try {
-    // 1. Buscamos el ID del tipo de item "Ropa (Polos)"
-    const tipoRopa = await prisma.tipos_item.findUnique({
-      where: { nombre_tipo: "Ropa (Polos)" }
-    });
+    const { tipo } = req.query;
+    let items;
 
-    if (!tipoRopa) {
-      return res.status(404).json({ error: "Categoría de ropa no encontrada. Revisa el seed." });
+    if (tipo) {
+      items = await prisma.items.findMany({
+        where: { tipos_item: { nombre_tipo: tipo } },
+        include: { tipos_item: true },
+        orderBy: { asset_index: 'asc' }
+      });
+    } else {
+      items = await prisma.items.findMany({
+        include: { tipos_item: true },
+        orderBy: { asset_index: 'asc' }
+      });
     }
 
-    // 2. Buscamos todos los items que sean de ese tipo
-    const items = await prisma.items.findMany({
-      where: { tipo_item_id: tipoRopa.id },
-      select: {
-        id: true,
-        nombre_item: true,
-        costo_gemas: true,
-        asset_index: true,
-        url_icono_tienda: true, // La URL del polo (ej. polo_1.png)
-        url_imagenes_equipado: true // El JSON con las 3 URLs
-      },
-      orderBy: { asset_index: 'asc' } // Ordena 1, 2, 3...
-    });
-    
     res.json(items);
-
   } catch (error) {
     console.error("Error al obtener items:", error);
-    res.status(500).json({ error: 'Error al obtener los items de la tienda.' });
+    res.status(500).json({ error: "Error al obtener items de tienda." });
   }
 };
 
-// ============================================================
-// POST /api/tienda/comprar
-// ¡ACTUALIZADO! Para usar req.body y manejar "Ropa (Polos)"
-// ============================================================
+// ============================================================================
+// GET /api/tienda/tipos — ADMIN
+// ============================================================================
+exports.getTiposItem = async (req, res) => {
+  try {
+    const tipos = await prisma.tipos_item.findMany();
+    res.json(tipos);
+  } catch (error) {
+    console.error("Error al obtener tipos:", error);
+    res.status(500).json({ error: "Error al obtener tipos." });
+  }
+};
+
+// ============================================================================
+// POST /api/tienda/comprar — ALUMNO
+// ============================================================================
 exports.comprarItem = async (req, res) => {
-  const { itemId } = req.body; // <-- CAMBIO: Usamos req.body (JSON)
+  const { itemId } = req.body;
   const usuarioId = BigInt(req.usuario.id);
 
   if (!itemId) {
-    return res.status(400).json({ error: 'Se requiere el itemId.' });
+    return res.status(400).json({ error: "Se requiere itemId." });
   }
 
   try {
     const resultado = await prisma.$transaction(async (tx) => {
-      // 1. Obtener el item y el usuario
-      const item = await tx.items.findUnique({ 
+      const item = await tx.items.findUnique({
         where: { id: Number(itemId) },
-        include: { tipos_item: true } // Incluimos el tipo
+        include: { tipos_item: true }
       });
-      const usuario = await tx.usuarios.findUnique({ where: { id: usuarioId } });
 
-      if (!item) throw new Error('Item no encontrado.');
-      if (!item.tipos_item) throw new Error('Item con tipo inválido.');
+      const usuario = await tx.usuarios.findUnique({
+        where: { id: usuarioId }
+      });
 
-      // 2. Verificar si el usuario tiene gemas
-      if (usuario.gemas < item.costo_gemas) {
-        throw new Error('No tienes suficientes gemas.');
-      }
+      if (!item) throw new Error("Item no encontrado.");
+      if (!item.tipos_item) throw new Error("Item sin tipo asociado.");
+      if (usuario.gemas < item.costo_gemas) throw new Error("No tienes suficientes gemas.");
 
-      // 3. Lógica para ROPA (Polos)
-      if (item.tipos_item.nombre_tipo === 'Ropa (Polos)') {
-        
-        // Verificar si ya lo posee en el inventario
-        const itemExistente = await tx.inventario_usuario.findFirst({
+      if (item.tipos_item.nombre_tipo !== "Pista") {
+        const yaExiste = await tx.inventario_usuario.findFirst({
           where: { usuario_id: usuarioId, item_id: item.id }
         });
-        if (itemExistente) throw new Error('Ya posees este item en tu inventario.');
 
-        // Añadir al inventario (armario)
+        if (yaExiste) throw new Error("Ya tienes este item.");
+
         await tx.inventario_usuario.create({
-          data: { usuario_id: usuarioId, item_id: item.id },
+          data: { usuario_id: usuarioId, item_id: item.id }
         });
-
-      } 
-      // 4. Lógica para otros tipos (ej: Consumibles)
-      else if (item.tipos_item.nombre_tipo === 'Pista') {
-        // (Tu lógica de pistas aquí)
-        console.log("Usuario compró un consumible");
-      } 
-      else {
-        throw new Error('Tipo de item no comprable.');
       }
 
-      // 5. Descontar gemas
-      const usuarioActualizado = await tx.usuarios.update({
+      if (item.tipos_item.nombre_tipo === "Pista") {
+        console.log("✓ Consumible comprado (Pista)");
+      }
+
+      const usuarioAct = await tx.usuarios.update({
         where: { id: usuarioId },
-        data: { gemas: { decrement: item.costo_gemas } },
+        data: { gemas: { decrement: item.costo_gemas } }
       });
 
-      return { gemasRestantes: usuarioActualizado.gemas };
+      return { gemasRestantes: usuarioAct.gemas };
     });
 
-    res.json({ message: '¡Compra exitosa!', ...resultado });
+    res.json({ message: "¡Compra exitosa!", ...resultado });
 
   } catch (error) {
-    console.error("Error al comprar item:", error);
+    console.error("Error al comprar:", error);
     res.status(400).json({ error: error.message });
+  }
+};
+
+// ============================================================================
+// 🧠 HELPER: Procesar archivos dinámicos
+// ============================================================================
+const procesarArchivos = (files, body, itemActual = null) => {
+  const baseUrl = 'tienda/';
+  
+  let icono = null;
+
+  const equipado = itemActual
+    ? { ...itemActual.url_imagenes_equipado }
+    : {};
+
+  files.forEach(file => {
+    const url = baseUrl + file.filename;
+
+    if (file.fieldname === 'icono' || file.fieldname === 'imagen') {
+      icono = url;
+    } 
+    else if (file.fieldname.startsWith('img_')) {
+      const key = file.fieldname.replace('img_', '').toUpperCase();
+      equipado[key] = url;
+    }
+  });
+
+  const finalIcono =
+    icono || (itemActual ? itemActual.url_icono_tienda : null);
+
+  return { finalIcono, finalEquipado: equipado };
+};
+
+// ============================================================================
+// CREATE ITEM — 100% DINÁMICO
+// ============================================================================
+exports.createItem = async (req, res) => {
+  const { nombre_item, costo_gemas, tipo_item_id, asset_index, descripcion } = req.body;
+
+  if (!nombre_item || !costo_gemas || !tipo_item_id) {
+    return res.status(400).json({ error: "Datos incompletos." });
+  }
+
+  try {
+    const { finalIcono, finalEquipado } = procesarArchivos(req.files || [], req.body);
+
+    if (Object.keys(finalEquipado).length === 0 && finalIcono) {
+      finalEquipado['DEFAULT'] = finalIcono;
+    }
+
+    const nuevo = await prisma.items.create({
+      data: {
+        nombre_item,
+        descripcion,
+        costo_gemas: Number(costo_gemas),
+        tipo_item_id: Number(tipo_item_id),
+        asset_index: Number(asset_index) || 0,
+        url_icono_tienda: finalIcono,
+        url_imagenes_equipado: finalEquipado
+      }
+    });
+
+    res.status(201).json(nuevo);
+
+  } catch (error) {
+    console.error("Error al crear item:", error);
+    res.status(500).json({ error: "Error al crear item." });
+  }
+};
+
+// ============================================================================
+// UPDATE ITEM — 100% DINÁMICO
+// ============================================================================
+exports.updateItem = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const item = await prisma.items.findUnique({ where: { id: Number(id) } });
+    if (!item) return res.status(404).json({ error: "No encontrado." });
+
+    const {
+      nombre_item,
+      descripcion,
+      costo_gemas,
+      tipo_item_id,
+      asset_index
+    } = req.body;
+
+    const { finalIcono, finalEquipado } =
+      procesarArchivos(req.files || [], req.body, item);
+
+    const actualizado = await prisma.items.update({
+      where: { id: Number(id) },
+      data: {
+        nombre_item: nombre_item ?? item.nombre_item,
+        descripcion: descripcion ?? item.descripcion,
+        costo_gemas: costo_gemas ? Number(costo_gemas) : item.costo_gemas,
+        asset_index: asset_index ? Number(asset_index) : item.asset_index,
+        tipo_item_id: tipo_item_id ? Number(tipo_item_id) : item.tipo_item_id,
+        url_icono_tienda: finalIcono,
+        url_imagenes_equipado: finalEquipado
+      }
+    });
+
+    res.json({ message: "Actualizado", item: actualizado });
+
+  } catch (error) {
+    console.error("Error al actualizar:", error);
+    res.status(500).json({ error: "Error al actualizar." });
+  }
+};
+
+// ============================================================================
+// DELETE ITEM
+// ============================================================================
+exports.deleteItem = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const item = await prisma.items.findUnique({ where: { id: Number(id) } });
+    if (!item) return res.status(404).json({ error: "No encontrado." });
+
+    const deleteFile = (url) => {
+      if (!url) return;
+      const filePath = path.join(__dirname, '../../public', url);
+      if (fs.existsSync(filePath)) {
+        try { fs.unlinkSync(filePath); } catch (e) { }
+      }
+    };
+
+    deleteFile(item.url_icono_tienda);
+
+    if (item.url_imagenes_equipado) {
+      Object.values(item.url_imagenes_equipado).forEach(deleteFile);
+    }
+
+    await prisma.items.delete({ where: { id: Number(id) } });
+
+    res.json({ message: "Item eliminado" });
+
+  } catch (error) {
+    console.error("Error deleteItem:", error);
+    res.status(500).json({ error: "Error al eliminar item." });
+  }
+};
+
+// ============================================================================
+// TIPOS — CRUD
+// ============================================================================
+exports.createTipo = async (req, res) => {
+  const { nombre_tipo } = req.body;
+  if (!nombre_tipo) return res.status(400).json({ error: 'Nombre requerido' });
+
+  try {
+    const nuevo = await prisma.tipos_item.create({ data: { nombre_tipo } });
+    res.status(201).json(nuevo);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al crear tipo.' });
+  }
+};
+
+exports.updateTipo = async (req, res) => {
+  const { id } = req.params;
+  const { nombre_tipo } = req.body;
+
+  try {
+    const up = await prisma.tipos_item.update({
+      where: { id: Number(id) },
+      data: { nombre_tipo }
+    });
+    res.json(up);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al actualizar.' });
+  }
+};
+
+exports.deleteTipo = async (req, res) => {
+  const { id } = req.params;
+  try {
+    await prisma.tipos_item.delete({ where: { id: Number(id) } });
+    res.json({ message: 'Tipo eliminado' });
+  } catch (error) {
+    res.status(400).json({ error: 'No se puede eliminar: Hay items usando este tipo.' });
   }
 };

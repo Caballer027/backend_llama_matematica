@@ -1,35 +1,61 @@
 // src/controllers/ciclosController.js
-const prisma = require('../prismaClient');
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
 
-// Obtener todos los ciclos disponibles
+// GET /api/ciclos (Tu función original)
 exports.getCiclos = async (req, res) => {
   try {
-    // ✅ CORREGIDO: "ciclos" -> "ciclo" (singular)
     const ciclos = await prisma.ciclo.findMany({
-      // ✅ CORREGIDO: "numero_ciclo" -> "numero" (según tu schema)
-      orderBy: { numero: 'asc' }, 
-      select: {
-        id: true,
-        // ✅ CORREGIDO: "nombre_ciclo" -> "nombre" (según tu schema)
-        nombre: true,
-        numero: true
-      }
+      orderBy: { numero: 'asc' },
+      select: { id: true, nombre: true, numero: true }
     });
-
-    if (ciclos.length === 0) {
-      return res.status(404).json({ message: "No se encontraron ciclos." });
-    }
-
-    // Devolvemos los nombres corregidos
-    const respuesta = ciclos.map(c => ({
-        id: c.id,
-        nombre_ciclo: c.nombre, // Mantenemos el nombre de la API si quieres
-        numero_ciclo: c.numero
-    }));
-
-    res.status(200).json(respuesta);
+    res.status(200).json(ciclos);
   } catch (error) {
     console.error("❌ Error al obtener ciclos:", error);
     res.status(500).json({ error: "Error interno al obtener ciclos." });
+  }
+};
+
+// ============================================================
+// 🔥 NUEVOS ENDPOINTS CRUD (SOLO ADMIN)
+// ============================================================
+
+// POST /api/ciclos
+exports.createCiclo = async (req, res) => {
+  const { nombre, numero } = req.body;
+  if (!nombre || !numero) return res.status(400).json({ error: 'Datos incompletos' });
+
+  try {
+    const nuevo = await prisma.ciclo.create({ data: { nombre, numero: Number(numero) } });
+    res.status(201).json(nuevo);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al crear ciclo' });
+  }
+};
+
+// PUT /api/ciclos/:id
+exports.updateCiclo = async (req, res) => {
+  const { id } = req.params;
+  const { nombre, numero } = req.body;
+  
+  try {
+    const actualizado = await prisma.ciclo.update({
+      where: { id: Number(id) },
+      data: { nombre, numero: Number(numero) }
+    });
+    res.json(actualizado);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al actualizar ciclo' });
+  }
+};
+
+// DELETE /api/ciclos/:id
+exports.deleteCiclo = async (req, res) => {
+  const { id } = req.params;
+  try {
+    await prisma.ciclo.delete({ where: { id: Number(id) } });
+    res.json({ message: 'Ciclo eliminado' });
+  } catch (error) {
+    res.status(500).json({ error: 'No se puede eliminar (tiene cursos asociados)' });
   }
 };
