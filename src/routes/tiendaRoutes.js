@@ -1,5 +1,5 @@
 // ============================================================
-// src/routes/tiendaRoutes.js — VERSIÓN COMPLETA 6.0 (MODIFICADA: upload.any())
+// src/routes/tiendaRoutes.js — VERSIÓN COMPLETA 6.0 FINAL
 // ============================================================
 const express = require('express');
 const router = express.Router();
@@ -28,15 +28,6 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({ storage });
-
-// Campos aceptados
-const uploadFields = upload.fields([
-  { name: 'imagen', maxCount: 1 },
-  { name: 'icono', maxCount: 1 },
-  { name: 'img_leon', maxCount: 1 },
-  { name: 'img_hipo', maxCount: 1 },
-  { name: 'img_conejo', maxCount: 1 },
-]);
 
 // ===================================================================
 // 🔐 TODAS LAS RUTAS REQUIEREN LOGIN
@@ -161,18 +152,14 @@ router.get('/tipos', roleMiddleware.isTeacherOrAdmin, tiendaController.getTiposI
  *             properties:
  *               nombre_item:
  *                 type: string
- *                 example: "Polo Azul"
  *               descripcion:
  *                 type: string
  *               costo_gemas:
  *                 type: integer
- *                 example: 150
  *               tipo_item_id:
  *                 type: integer
- *                 example: 1
  *               asset_index:
  *                 type: integer
- *                 example: 3
  *               imagen:
  *                 type: string
  *                 format: binary
@@ -285,7 +272,7 @@ router.put('/items/:id', roleMiddleware.isAdmin, upload.any(), tiendaController.
 router.delete('/items/:id', roleMiddleware.isAdmin, tiendaController.deleteItem);
 
 // ============================================================
-// 🔥 CRUD DE TIPOS DE ITEM (CATEGORÍAS) — ADMIN
+// 🔥 CRUD DE TIPOS DE ITEM — ADMIN
 // ============================================================
 
 // -------------------------------

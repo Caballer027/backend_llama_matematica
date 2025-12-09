@@ -1,9 +1,36 @@
 // ============================================================================
-// src/controllers/tiendaController.js — VERSIÓN COMPLETA 6.0 (DINÁMICA)
+// src/controllers/tiendaController.js — VERSIÓN CLOUDINARY FINAL
 // ============================================================================
+
 const prisma = require('../prismaClient');
-const path = require('path');
-const fs = require('fs');
+const { v2: cloudinary } = require('cloudinary');
+
+// ---------------------------------------------------------------------------
+// CONFIG CLOUDINARY
+// ---------------------------------------------------------------------------
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+});
+
+// ============================================================================
+// 🧩 Extractor del Public ID desde una URL de Cloudinary
+// ============================================================================
+const extractPublicId = (url) => {
+  if (!url || typeof url !== 'string' || !url.includes('res.cloudinary.com')) return null;
+  
+  const parts = url.split('/');
+  const versionIndex = parts.findIndex(p => p.startsWith('v'));
+  if (versionIndex === -1) return null;
+
+  const publicIdWithExt = parts.slice(versionIndex + 1).join('/');
+
+  const finalId = 'llama_matematica/' +
+    publicIdWithExt.substring(0, publicIdWithExt.lastIndexOf('.'));
+
+  return finalId;
+};
 
 // ============================================================================
 // GET /api/tienda/items — PUBLIC / ADMIN
@@ -27,6 +54,7 @@ exports.getItems = async (req, res) => {
     }
 
     res.json(items);
+
   } catch (error) {
     console.error("Error al obtener items:", error);
     res.status(500).json({ error: "Error al obtener items de tienda." });
@@ -84,10 +112,6 @@ exports.comprarItem = async (req, res) => {
         });
       }
 
-      if (item.tipos_item.nombre_tipo === "Pista") {
-        console.log("✓ Consumible comprado (Pista)");
-      }
-
       const usuarioAct = await tx.usuarios.update({
         where: { id: usuarioId },
         data: { gemas: { decrement: item.costo_gemas } }
@@ -105,11 +129,9 @@ exports.comprarItem = async (req, res) => {
 };
 
 // ============================================================================
-// 🧠 HELPER: Procesar archivos dinámicos
+// 🧠 HELPER: Procesar archivos dinámicos (Cloudinary)
 // ============================================================================
 const procesarArchivos = (files, body, itemActual = null) => {
-  const baseUrl = 'tienda/';
-  
   let icono = null;
 
   const equipado = itemActual
@@ -117,12 +139,11 @@ const procesarArchivos = (files, body, itemActual = null) => {
     : {};
 
   files.forEach(file => {
-    const url = baseUrl + file.filename;
+    const url = file.path; // URL completa de Cloudinary
 
     if (file.fieldname === 'icono' || file.fieldname === 'imagen') {
       icono = url;
-    } 
-    else if (file.fieldname.startsWith('img_')) {
+    } else if (file.fieldname.startsWith('img_')) {
       const key = file.fieldname.replace('img_', '').toUpperCase();
       equipado[key] = url;
     }
@@ -135,7 +156,7 @@ const procesarArchivos = (files, body, itemActual = null) => {
 };
 
 // ============================================================================
-// CREATE ITEM — 100% DINÁMICO
+// CREATE ITEM — CLOUDINARY
 // ============================================================================
 exports.createItem = async (req, res) => {
   const { nombre_item, costo_gemas, tipo_item_id, asset_index, descripcion } = req.body;
@@ -145,7 +166,8 @@ exports.createItem = async (req, res) => {
   }
 
   try {
-    const { finalIcono, finalEquipado } = procesarArchivos(req.files || [], req.body);
+    const { finalIcono, finalEquipado } =
+      procesarArchivos(req.files || [], req.body);
 
     if (Object.keys(finalEquipado).length === 0 && finalIcono) {
       finalEquipado['DEFAULT'] = finalIcono;
@@ -172,13 +194,15 @@ exports.createItem = async (req, res) => {
 };
 
 // ============================================================================
-// UPDATE ITEM — 100% DINÁMICO
+// UPDATE ITEM — CLOUDINARY
 // ============================================================================
 exports.updateItem = async (req, res) => {
   const { id } = req.params;
 
   try {
-    const item = await prisma.items.findUnique({ where: { id: Number(id) } });
+    const item = await prisma.items.findUnique({
+      where: { id: Number(id) }
+    });
     if (!item) return res.status(404).json({ error: "No encontrado." });
 
     const {
@@ -214,27 +238,37 @@ exports.updateItem = async (req, res) => {
 };
 
 // ============================================================================
-// DELETE ITEM
+// DELETE ITEM — CLOUDINARY
 // ============================================================================
 exports.deleteItem = async (req, res) => {
   const { id } = req.params;
 
   try {
-    const item = await prisma.items.findUnique({ where: { id: Number(id) } });
+    const item = await prisma.items.findUnique({
+      where: { id: Number(id) }
+    });
     if (!item) return res.status(404).json({ error: "No encontrado." });
 
-    const deleteFile = (url) => {
+    const deleteCloudinaryFile = async (url) => {
       if (!url) return;
-      const filePath = path.join(__dirname, '../../public', url);
-      if (fs.existsSync(filePath)) {
-        try { fs.unlinkSync(filePath); } catch (e) { }
+      const publicId = extractPublicId(url);
+      if (publicId) {
+        try {
+          await cloudinary.uploader.destroy(publicId);
+        } catch (e) {
+          console.error("Error borrando Cloudinary:", e);
+        }
       }
     };
 
-    deleteFile(item.url_icono_tienda);
+    // borrar icono
+    await deleteCloudinaryFile(item.url_icono_tienda);
 
+    // borrar ropa
     if (item.url_imagenes_equipado) {
-      Object.values(item.url_imagenes_equipado).forEach(deleteFile);
+      const deletePromises =
+        Object.values(item.url_imagenes_equipado).map(deleteCloudinaryFile);
+      await Promise.all(deletePromises);
     }
 
     await prisma.items.delete({ where: { id: Number(id) } });
@@ -279,9 +313,11 @@ exports.updateTipo = async (req, res) => {
 
 exports.deleteTipo = async (req, res) => {
   const { id } = req.params;
+
   try {
     await prisma.tipos_item.delete({ where: { id: Number(id) } });
     res.json({ message: 'Tipo eliminado' });
+
   } catch (error) {
     res.status(400).json({ error: 'No se puede eliminar: Hay items usando este tipo.' });
   }
