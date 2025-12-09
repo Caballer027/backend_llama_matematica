@@ -1,5 +1,5 @@
 // ============================================================
-// src/routes/tiendaRoutes.js — VERSIÓN COMPLETA 6.0 FINAL
+// src/routes/tiendaRoutes.js — VERSIÓN CLOUDINARY (upload.any())
 // ============================================================
 const express = require('express');
 const router = express.Router();
@@ -8,26 +8,9 @@ const tiendaController = require('../controllers/tiendaController');
 const protect = require('../middleware/authMiddleware');
 const roleMiddleware = require('../middleware/roleMiddleware');
 
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
-
-// ===================================================================
-// 📦 1. CONFIGURACIÓN MULTER (IMÁGENES TIENDA)
-// ===================================================================
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const dir = path.join(__dirname, '../../public/tienda');
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    cb(null, dir);
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
-  }
-});
-
-const upload = multer({ storage });
+// 🔥 NUEVO: Usar middleware global de subida (Cloudinary)
+// Asegúrate de que ../middleware/uploadMiddleware exporte el middleware (ej: module.exports = upload)
+const upload = require('../middleware/uploadMiddleware');
 
 // ===================================================================
 // 🔐 TODAS LAS RUTAS REQUIEREN LOGIN
@@ -152,14 +135,18 @@ router.get('/tipos', roleMiddleware.isTeacherOrAdmin, tiendaController.getTiposI
  *             properties:
  *               nombre_item:
  *                 type: string
+ *                 example: "Polo Azul"
  *               descripcion:
  *                 type: string
  *               costo_gemas:
  *                 type: integer
+ *                 example: 150
  *               tipo_item_id:
  *                 type: integer
+ *                 example: 1
  *               asset_index:
  *                 type: integer
+ *                 example: 3
  *               imagen:
  *                 type: string
  *                 format: binary
