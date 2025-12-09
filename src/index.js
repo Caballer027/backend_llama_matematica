@@ -2,25 +2,25 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const path = require('path'); 
+const path = require('path'); 
 
 // 🔥 TRUCO MAESTRO: Enseñar a JSON cómo leer BigInts
 // Esto soluciona el error "Do not know how to serialize a BigInt" en TODO el proyecto.
 // Convierte los IDs gigantes (ej: 9007199254740991n) a string ("9007199254740991") automáticamente.
 BigInt.prototype.toJSON = function () {
-  return this.toString();
+  return this.toString();
 };
 
 // 1. IMPORTACIÓN DE RUTAS
 const authRoutes = require('./routes/authRoutes');
 const perfilRoutes = require('./routes/perfilRoutes');
 const cursoRoutes = require('./routes/cursoRoutes');
-const temaRoutes = require('./routes/temaRoutes'); 
+const temaRoutes = require('./routes/temaRoutes'); 
 const leccionRoutes = require('./routes/leccionRoutes');
 const tiendaRoutes = require('./routes/tiendaRoutes');
-const personajeRoutes = require('./routes/personajeRoutes'); 
+const personajeRoutes = require('./routes/personajeRoutes'); 
 const rankingRoutes = require('./routes/rankingRoutes');
-const estudianteRoutes = require('./routes/estudianteRoutes'); 
+const estudianteRoutes = require('./routes/estudianteRoutes'); 
 const inventarioRoutes = require('./routes/inventarioRoutes');
 const institucionesRoutes = require('./routes/institucionesRoutes');
 const carreraRoutes = require('./routes/carreraRoutes');
@@ -39,27 +39,27 @@ const PORT = process.env.PORT || 3000;
 
 // --- CONFIGURACIÓN SWAGGER ---
 const swaggerOptions = {
-  definition: {
-    openapi: '3.0.0',
-    info: {
-      title: 'Llama Matemática API',
-      version: '1.0.0',
-      description: 'Documentación oficial de la API.',
-    },
-    servers: [
-      { url: 'http://localhost:3000/api', description: 'Servidor Local' },
-    ],
-    components: {
-      securitySchemes: {
-        bearerAuth: {
-          type: 'http',
-          scheme: 'bearer',
-          bearerFormat: 'JWT',
-        },
-      },
-    },
-  },
-  apis: ['./src/routes/*.js'],
+  definition: {
+    openapi: '3.0.0',
+    info: {
+      title: 'Llama Matemática API',
+      version: '1.0.0',
+      description: 'Documentación oficial de la API.',
+    },
+    servers: [
+      { url: 'http://localhost:3000/api', description: 'Servidor Local' },
+    ],
+    components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+        },
+      },
+    },
+  },
+  apis: ['./src/routes/*.js'],
 };
 const swaggerDocs = swaggerJsdoc(swaggerOptions);
 
@@ -67,10 +67,24 @@ const swaggerDocs = swaggerJsdoc(swaggerOptions);
 // 2. MIDDLEWARES
 // -----------------------------------------
 
+// ===============================================
+// 🔴 MODIFICACIÓN CRÍTICA: CORS PARA DESPLIEGUE
+// ===============================================
+
+// Arreglo de orígenes permitidos: local para desarrollo, FRONTEND_URL para Vercel
+const allowedOrigins = [
+    'http://localhost:5173',
+    process.env.FRONTEND_URL
+];
+
 app.use(cors({
-  origin: 'http://localhost:5173', // Tu Frontend
-  credentials: true
+  origin: allowedOrigins,
+  credentials: true
 }));
+// ===============================================
+// 🔴 FIN DE MODIFICACIÓN
+// ===============================================
+
 
 app.use(express.json());
 
@@ -108,8 +122,8 @@ app.use('/api/admin', adminRoutes);
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocs));
 
 app.listen(PORT, () => {
-  console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
-  console.log(`📚 Swagger disponible en http://localhost:${PORT}/api-docs`);
-  // Mensaje para confirmar que la carpeta public está activa
-  console.log(`🖼️  Archivos estáticos servidos desde: ${path.join(__dirname, '../public')}`);
+  console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
+  console.log(`📚 Swagger disponible en http://localhost:${PORT}/api-docs`);
+  // Mensaje para confirmar que la carpeta public está activa
+  console.log(`🖼️  Archivos estáticos servidos desde: ${path.join(__dirname, '../public')}`);
 });
