@@ -1,41 +1,44 @@
-// src/middleware/uploadMiddleware.js
+// src/middleware/uploadMiddleware.js (CÓDIGO NUEVO COMPLETO)
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+const { v2: cloudinary } = require('cloudinary');
 
-// Función para crear carpetas si no existen
-const ensureDirectoryExistence = (filePath) => {
-  if (!fs.existsSync(filePath)) {
-    fs.mkdirSync(filePath, { recursive: true });
-  }
-};
+// 1. CONFIGURACIÓN DE CLOUDINARY (Usa las variables que pusiste en Render)
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+});
 
-// Configuración de almacenamiento
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadPath = path.join(__dirname, '../../public/historias');
-    ensureDirectoryExistence(uploadPath);
-    cb(null, uploadPath);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
+// 2. CONFIGURACIÓN DE ALMACENAMIENTO (Ahora usa Cloudinary)
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: (req, file) => {
+    // La imagen se guardará en la carpeta 'llama_matematica/temas' dentro de Cloudinary
+    const folderName = 'llama_matematica/temas';
+    
+    return {
+        folder: folderName,
+        format: 'webp', // Optimización automática
+        public_id: `${folderName}_${Date.now()}_${file.fieldname}` 
+    };
   }
 });
 
-// Filtro de archivos — solo imágenes
+// 3. Filtro de archivos
 const fileFilter = (req, file, cb) => {
   if (file.mimetype.startsWith('image/')) {
     cb(null, true);
   } else {
-    cb(new Error('No es una imagen válida'), false);
+    // Se usa MulterError para el manejo de errores
+    cb(new Error('No es una imagen válida'), false); 
   }
 };
 
 const upload = multer({
   storage: storage,
   fileFilter: fileFilter,
-  limits: { fileSize: 5 * 1024 * 1024 } // 5MB
+  limits: { fileSize: 10 * 1024 * 1024 } // Límite de 10MB
 });
 
 module.exports = upload;

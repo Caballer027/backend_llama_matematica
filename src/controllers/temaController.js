@@ -1,14 +1,42 @@
-// src/controllers/temaController.js
+// ============================================================
+// src/controllers/temaController.js (VERSIÓN CLOUDINARY COMPLETA)
+// ============================================================
+
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
-const fs = require('fs');
-const path = require('path');
+// const fs = require('fs');
+// const path = require('path');
+const { v2: cloudinary } = require('cloudinary');
+
+// ============================================================
+// CLOUDINARY CONFIG
+// ============================================================
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+// ============================================================
+// Función auxiliar para extraer el public_id desde una URL
+// ============================================================
+const extractPublicId = (url) => {
+  if (!url || typeof url !== 'string' || !url.includes('res.cloudinary.com')) return null;
+
+  const parts = url.split('/');
+  const versionIndex = parts.findIndex((p) => p.startsWith('v'));
+  if (versionIndex === -1) return null;
+
+  const publicIdWithExt = parts.slice(versionIndex + 1).join('/');
+  return publicIdWithExt.substring(0, publicIdWithExt.lastIndexOf('.'));
+};
 
 // ============================================================
 // GET /api/temas/:id
 // ============================================================
 exports.getTemaById = async (req, res) => {
   const temaId = Number(req.params.id);
+
   try {
     const tema = await prisma.temas.findUnique({
       where: { id: temaId },
@@ -21,17 +49,16 @@ exports.getTemaById = async (req, res) => {
         historia_desenlace: true,
         url_imagen_inicio: true,
         url_imagen_nudo: true,
-        url_imagen_desenlace: true
-      }
+        url_imagen_desenlace: true,
+      },
     });
 
-    if (!tema) return res.status(404).json({ error: 'Tema no encontrado.' });
+    if (!tema) return res.status(404).json({ error: "Tema no encontrado." });
 
     res.json(tema);
-
   } catch (error) {
-    console.error('❌ Error al obtener el tema:', error.message);
-    res.status(500).json({ error: 'Error al obtener los detalles del tema.' });
+    console.error("❌ Error al obtener el tema:", error.message);
+    res.status(500).json({ error: "Error al obtener los detalles del tema." });
   }
 };
 
@@ -46,25 +73,24 @@ exports.getLeccionesPorTema = async (req, res) => {
       where: { id: temaId },
       include: {
         lecciones: {
-          orderBy: { orden: 'asc' },
-          select: { id: true, titulo_leccion: true, orden: true }
-        }
-      }
+          orderBy: { orden: "asc" },
+          select: { id: true, titulo_leccion: true, orden: true },
+        },
+      },
     });
 
     if (!temaConLecciones)
-      return res.status(404).json({ error: 'Tema no encontrado.' });
+      return res.status(404).json({ error: "Tema no encontrado." });
 
     res.json(temaConLecciones.lecciones);
-
   } catch (error) {
-    console.error('❌ Error al obtener las lecciones del tema:', error);
-    res.status(500).json({ error: 'Error al obtener las lecciones.' });
+    console.error("❌ Error al obtener las lecciones del tema:", error);
+    res.status(500).json({ error: "Error al obtener las lecciones." });
   }
 };
 
 // ============================================================
-// POST /api/temas → Crear tema con imágenes
+// POST /api/temas → Crear tema con imágenes (Cloudinary)
 // ============================================================
 exports.createTema = async (req, res) => {
   const {
@@ -74,31 +100,21 @@ exports.createTema = async (req, res) => {
     titulo_pregunta,
     historia_introduccion,
     historia_nudo,
-    historia_desenlace
+    historia_desenlace,
   } = req.body;
 
   const files = req.files || {};
 
   if (!curso_id || !nombre_tema || !orden) {
     return res.status(400).json({
-      error: 'Faltan datos obligatorios (curso_id, nombre_tema, orden).'
+      error: "Faltan datos obligatorios (curso_id, nombre_tema, orden).",
     });
   }
 
   try {
-    const baseUrl = '/historias/';
-
-    const imgInicio = files.imagen_inicio
-      ? baseUrl + files.imagen_inicio[0].filename
-      : null;
-
-    const imgNudo = files.imagen_nudo
-      ? baseUrl + files.imagen_nudo[0].filename
-      : null;
-
-    const imgDesenlace = files.imagen_desenlace
-      ? baseUrl + files.imagen_desenlace[0].filename
-      : null;
+    const imgInicio = files.imagen_inicio ? files.imagen_inicio[0].path : null;
+    const imgNudo = files.imagen_nudo ? files.imagen_nudo[0].path : null;
+    const imgDesenlace = files.imagen_desenlace ? files.imagen_desenlace[0].path : null;
 
     const nuevoTema = await prisma.temas.create({
       data: {
@@ -111,57 +127,58 @@ exports.createTema = async (req, res) => {
         historia_desenlace,
         url_imagen_inicio: imgInicio,
         url_imagen_nudo: imgNudo,
-        url_imagen_desenlace: imgDesenlace
-      }
+        url_imagen_desenlace: imgDesenlace,
+      },
     });
 
     res.status(201).json(nuevoTema);
-
   } catch (error) {
-    console.error('ERROR CREAR TEMA:', error);
-    res.status(500).json({ error: 'Error al crear el tema.' });
+    console.error("ERROR CREAR TEMA:", error);
+    res.status(500).json({ error: "Error al crear el tema." });
   }
 };
 
 // ============================================================
-// PUT /api/temas/:id → Actualizar tema e imágenes
+// PUT /api/temas/:id → Actualizar tema + imágenes (Cloudinary)
 // ============================================================
 exports.updateTema = async (req, res) => {
   const { id } = req.params;
+
   const {
     nombre_tema,
     orden,
     titulo_pregunta,
     historia_introduccion,
     historia_nudo,
-    historia_desenlace
+    historia_desenlace,
   } = req.body;
 
   const files = req.files || {};
 
   try {
     const temaExistente = await prisma.temas.findUnique({
-      where: { id: Number(id) }
+      where: { id: Number(id) },
     });
 
     if (!temaExistente)
-      return res.status(404).json({ error: 'Tema no encontrado.' });
+      return res.status(404).json({ error: "Tema no encontrado." });
 
-    // Función para reemplazar imágenes
-    const getNewUrl = (fieldKey, oldUrl) => {
+    const getNewUrl = async (fieldKey, oldUrl) => {
       if (files[fieldKey]) {
         if (oldUrl) {
-          const oldPath = path.join(__dirname, '../../public', oldUrl);
-          if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+          const publicId = extractPublicId(oldUrl);
+          if (publicId) await cloudinary.uploader.destroy(publicId);
         }
-        return '/historias/' + files[fieldKey][0].filename;
+        return files[fieldKey][0].path;
       }
       return oldUrl;
     };
 
-    const imgInicio = getNewUrl('imagen_inicio', temaExistente.url_imagen_inicio);
-    const imgNudo = getNewUrl('imagen_nudo', temaExistente.url_imagen_nudo);
-    const imgDesenlace = getNewUrl('imagen_desenlace', temaExistente.url_imagen_desenlace);
+    const [imgInicio, imgNudo, imgDesenlace] = await Promise.all([
+      getNewUrl("imagen_inicio", temaExistente.url_imagen_inicio),
+      getNewUrl("imagen_nudo", temaExistente.url_imagen_nudo),
+      getNewUrl("imagen_desenlace", temaExistente.url_imagen_desenlace),
+    ]);
 
     const actualizado = await prisma.temas.update({
       where: { id: Number(id) },
@@ -174,45 +191,51 @@ exports.updateTema = async (req, res) => {
         historia_desenlace,
         url_imagen_inicio: imgInicio,
         url_imagen_nudo: imgNudo,
-        url_imagen_desenlace: imgDesenlace
-      }
+        url_imagen_desenlace: imgDesenlace,
+      },
     });
 
     res.json(actualizado);
-
   } catch (error) {
-    console.error('ERROR UPDATE TEMA:', error);
-    res.status(500).json({ error: 'Error al actualizar tema.' });
+    console.error("ERROR UPDATE TEMA:", error);
+    res.status(500).json({ error: "Error al actualizar tema." });
   }
 };
 
 // ============================================================
-// DELETE /api/temas/:id
+// DELETE /api/temas/:id → Eliminar tema + imágenes (Cloudinary)
 // ============================================================
 exports.deleteTema = async (req, res) => {
   const { id } = req.params;
 
   try {
     const tema = await prisma.temas.findUnique({
-      where: { id: Number(id) }
+      where: { id: Number(id) },
     });
 
     if (tema) {
-      [tema.url_imagen_inicio, tema.url_imagen_nudo, tema.url_imagen_desenlace].forEach((url) => {
-        if (url) {
-          const filePath = path.join(__dirname, '../../public', url);
-          if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-        }
-      });
+      const urls = [
+        tema.url_imagen_inicio,
+        tema.url_imagen_nudo,
+        tema.url_imagen_desenlace,
+      ];
+
+      await Promise.all(
+        urls.map(async (url) => {
+          if (!url) return;
+          const publicId = extractPublicId(url);
+          if (publicId) await cloudinary.uploader.destroy(publicId);
+        })
+      );
     }
 
     await prisma.temas.delete({ where: { id: Number(id) } });
 
-    res.json({ message: 'Tema eliminado.' });
-
+    res.json({ message: "Tema eliminado." });
   } catch (error) {
+    console.error("ERROR DELETE TEMA:", error);
     res.status(500).json({
-      error: 'Error al eliminar tema (posiblemente tiene lecciones asociadas).'
+      error: "Error al eliminar tema (posiblemente tiene lecciones asociadas).",
     });
   }
 };
