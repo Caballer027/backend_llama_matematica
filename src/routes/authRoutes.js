@@ -10,10 +10,10 @@ const authController = require('../controllers/authController');
  *   description: Endpoints para el registro y autenticación de usuarios
  */
 
-//
 // ============================================================
 // 1. REGISTRO MANUAL
 // ============================================================
+
 /**
  * @swagger
  * /auth/register:
@@ -21,11 +21,10 @@ const authController = require('../controllers/authController');
  *     summary: Registra un nuevo usuario (Manual)
  *     tags: [Autenticación]
  *     description: |
- *       Crea una nueva cuenta de estudiante usando correo institucional **@tecsup.edu.pe**  
- *       Los campos carrera_id y ciclo_actual_id son obligatorios en el registro manual.
- *
+ *       Crea una nueva cuenta de estudiante usando correo institucional **@tecsup.edu.pe**
+ *       * Los campos carrera_id y ciclo_actual_id son obligatorios en el registro manual.
+ *       * El campo ano_ingreso es opcional (se asume el año actual si no se envía).
  *     security: []
- *
  *     requestBody:
  *       required: true
  *       content:
@@ -38,7 +37,6 @@ const authController = require('../controllers/authController');
  *               - correo_electronico
  *               - contrasena
  *               - carrera_id
- *               - ano_ingreso
  *               - ciclo_actual_id
  *             properties:
  *               nombre:
@@ -64,11 +62,11 @@ const authController = require('../controllers/authController');
  *                 example: 2
  *               ano_ingreso:
  *                 type: integer
+ *                 description: Opcional. Si no se envía, se usa el año actual.
  *                 example: 2025
  *               ciclo_actual_id:
  *                 type: integer
  *                 example: 1
- *
  *     responses:
  *       '201':
  *         description: Usuario registrado exitosamente.
@@ -95,9 +93,8 @@ const authController = require('../controllers/authController');
  *                       type: integer
  *                     ciclo_actual_id:
  *                       type: integer
- *
  *       '400':
- *         description: Faltan campos o correo inválido.
+ *         description: Faltan campos obligatorios o correo inválido.
  *       '409':
  *         description: El correo ya existe.
  *       '500':
@@ -105,11 +102,10 @@ const authController = require('../controllers/authController');
  */
 router.post('/register', authController.register);
 
-
-//
 // ============================================================
 // 2. LOGIN TRADICIONAL
 // ============================================================
+
 /**
  * @swagger
  * /auth/login:
@@ -118,7 +114,6 @@ router.post('/register', authController.register);
  *     tags: [Autenticación]
  *     description: Autentica al usuario y devuelve un token JWT válido por 30 días.
  *     security: []
- *
  *     requestBody:
  *       required: true
  *       content:
@@ -136,7 +131,6 @@ router.post('/register', authController.register);
  *                 type: string
  *                 format: password
  *                 example: "123456"
- *
  *     responses:
  *       '200':
  *         description: Inicio de sesión exitoso.
@@ -157,11 +151,10 @@ router.post('/register', authController.register);
  */
 router.post('/login', authController.login);
 
-
-//
 // ============================================================
 // 3. LOGIN/REGISTRO CON GOOGLE
 // ============================================================
+
 /**
  * @swagger
  * /auth/google:
@@ -169,13 +162,11 @@ router.post('/login', authController.login);
  *     summary: Login/Registro con Google (para App Móvil)
  *     tags: [Autenticación]
  *     description: |
- *       - Verifica si el correo existe en la base de datos  
- *       - Si no existe, **crea automáticamente un usuario sin contraseña**  
- *       - Asigna automáticamente el rol Estudiante  
+ *       - Verifica si el correo existe en la base de datos
+ *       - Si no existe, **crea automáticamente un usuario sin contraseña**
+ *       - Asigna automáticamente el rol Estudiante
  *       - Devuelve un token JWT
- *
  *     security: []
- *
  *     requestBody:
  *       required: true
  *       content:
@@ -194,7 +185,6 @@ router.post('/login', authController.login);
  *               photoUrl:
  *                 type: string
  *                 example: "https://lh3.googleusercontent.com/photo.jpg"
- *
  *     responses:
  *       '200':
  *         description: Login Google exitoso.
@@ -220,7 +210,6 @@ router.post('/login', authController.login);
  *                     es_nuevo:
  *                       type: boolean
  *                       example: true
- *
  *       '400':
  *         description: Falta email.
  *       '500':

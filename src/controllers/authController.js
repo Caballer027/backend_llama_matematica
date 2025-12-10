@@ -26,13 +26,14 @@ exports.register = async (req, res) => {
     contrasena, 
     fecha_nacimiento, 
     carrera_id, 
-    ano_ingreso, 
+    ano_ingreso, // Ahora es opcional
     ciclo_actual_id 
   } = req.body;
 
-  if (!correo_electronico || !contrasena || !nombre || !ano_ingreso || !carrera_id || !ciclo_actual_id) {
+  // Validación: Quitamos ano_ingreso de los obligatorios
+  if (!correo_electronico || !contrasena || !nombre || !carrera_id || !ciclo_actual_id) {
     return res.status(400).json({
-      error: 'Faltan campos requeridos.'
+      error: 'Faltan campos requeridos (nombre, correo, contraseña, carrera o ciclo).'
     });
   }
 
@@ -47,6 +48,11 @@ exports.register = async (req, res) => {
     const rolEstudiante = await prisma.roles.findUnique({ where: { nombre_rol: 'Estudiante' } });
     const tecsup = await prisma.institucion.findUnique({ where: { nombre: 'Tecsup' } });
 
+    // Si no hay instituto Tecsup creado, esto fallará, así que aseguramos que exista o manejamos error
+    if (!tecsup) {
+      return res.status(500).json({ error: 'Error de configuración: Instituto Tecsup no encontrado.' });
+    }
+
     const nuevoUsuario = await prisma.usuarios.create({
       data: {
         nombre,
@@ -55,11 +61,12 @@ exports.register = async (req, res) => {
         hash_contrasena,
         fecha_nacimiento: new Date(fecha_nacimiento),
         carrera_id: Number(carrera_id),
-        ano_ingreso: Number(ano_ingreso),
+        // Si no envían año, ponemos el año actual por defecto
+        ano_ingreso: ano_ingreso ? Number(ano_ingreso) : new Date().getFullYear(),
         ciclo_actual_id: Number(ciclo_actual_id),
         rol_id: rolEstudiante.id,
         institucion_id: tecsup.id,
-        personaje_activo_id: 1
+        personaje_activo_id: 1 // Asumimos que el ID 1 (Hipopótamo/León) siempre existe por el Seed
       },
     });
 
@@ -89,7 +96,7 @@ exports.register = async (req, res) => {
 };
 
 // ============================================================
-// 2. LOGIN TRADICIONAL (Corregido con retorno de usuario completo)
+// 2. LOGIN TRADICIONAL
 // ============================================================
 exports.login = async (req, res) => {
   const { correo_electronico, contrasena } = req.body;
@@ -113,10 +120,8 @@ exports.login = async (req, res) => {
       return res.status(401).json({ error: 'Correo o contraseña incorrectos.' });
     }
 
-    // Generar Token
     const token = generarToken(usuario.id, usuario.rol_id);
 
-    // *** CORRECCIÓN AQUÍ → retornar usuario ***
     res.json({
       message: '¡Inicio de sesión exitoso!',
       token,
@@ -145,12 +150,10 @@ exports.googleLogin = async (req, res) => {
   if (!email) return res.status(400).json({ error: 'Falta el email de Google.' });
 
   try {
-    // Buscar si ya existe
     let usuario = await prisma.usuarios.findUnique({
       where: { correo_electronico: email }
     });
 
-    // Si no existe → crear usuario básico
     if (!usuario) {
       const rolEstudiante = await prisma.roles.findUnique({ where: { nombre_rol: 'Estudiante' } });
       const tecsup = await prisma.institucion.findUnique({ where: { nombre: 'Tecsup' } });
@@ -173,7 +176,6 @@ exports.googleLogin = async (req, res) => {
       });
     }
 
-    // Generar Token
     const token = generarToken(usuario.id, usuario.rol_id);
 
     res.json({
