@@ -11,8 +11,9 @@ const adminMiddleware = require('../middleware/adminMiddleware');
  *   description: Administración y consulta de ciclos académicos.
  */
 
-// Middleware global → requiere JWT para todas las rutas
-router.use(authMiddleware);
+// ===================================================================
+// 🔓 RUTA PÚBLICA (Se define ANTES del authMiddleware)
+// ===================================================================
 
 /**
  * ===================================================================
@@ -25,9 +26,7 @@ router.use(authMiddleware);
  *   get:
  *     summary: Obtiene la lista de ciclos académicos
  *     tags: [Ciclos]
- *     description: Devuelve todos los ciclos registrados en la base de datos, ordenados por número.
- *     security:
- *       - bearerAuth: []
+ *     description: Devuelve todos los ciclos registrados en la base de datos, ordenados por número. Esta ruta es pública.
  *     responses:
  *       200:
  *         description: Lista de ciclos obtenida correctamente.
@@ -50,6 +49,12 @@ router.use(authMiddleware);
  */
 router.get('/', ciclosController.getCiclos);
 
+// ===================================================================
+// 🔒 RUTAS PRIVADAS (Se definen DESPUÉS del authMiddleware)
+// ===================================================================
+
+// Middleware global para las siguientes rutas → requiere JWT
+router.use(authMiddleware);
 
 /**
  * ===================================================================
@@ -92,7 +97,6 @@ router.get('/', ciclosController.getCiclos);
  */
 router.post('/', adminMiddleware, ciclosController.createCiclo);
 
-
 /**
  * ===================================================================
  * PUT /api/ciclos/:id  (SOLO ADMIN)
@@ -112,7 +116,7 @@ router.post('/', adminMiddleware, ciclosController.createCiclo);
  *         required: true
  *         schema:
  *           type: integer
- *         example: 1
+ *           example: 1
  *     requestBody:
  *       required: true
  *       content:
@@ -140,7 +144,6 @@ router.post('/', adminMiddleware, ciclosController.createCiclo);
  */
 router.put('/:id', adminMiddleware, ciclosController.updateCiclo);
 
-
 /**
  * ===================================================================
  * DELETE /api/ciclos/:id  (SOLO ADMIN)
@@ -160,7 +163,7 @@ router.put('/:id', adminMiddleware, ciclosController.updateCiclo);
  *         required: true
  *         schema:
  *           type: integer
- *         example: 1
+ *           example: 1
  *     responses:
  *       200:
  *         description: Ciclo eliminado correctamente.
