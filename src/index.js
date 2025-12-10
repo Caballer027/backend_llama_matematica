@@ -1,4 +1,4 @@
-// src/index.js (VERSIÓN COMPLETA Y FINAL PARA DESPLIEGUE EN RENDER)
+// src/index.js (VERSIÓN FINAL CORREGIDA + BIGINT FIX)
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -38,7 +38,7 @@ const swaggerJsdoc = require('swagger-jsdoc');
 // 🔴 NUEVO CÓDIGO (Para Swagger Dinámico)
 // ===============================================
 // Obtener la URL de Render, o usar localhost por defecto
-const renderUrl = process.env.RENDER_EXTERNAL_URL; 
+const renderUrl = process.env.RENDER_EXTERNAL_URL; 
 const baseUrl = renderUrl ? `${renderUrl}/api` : 'http://localhost:3000/api';
 
 const app = express();
@@ -53,15 +53,15 @@ const swaggerOptions = {
       version: '1.0.0',
       description: 'Documentación oficial de la API.',
     },
-    // ===============================================
-    // 🔴 MODIFICACIÓN 1: SERVER URL
-    // ===============================================
+    // ===============================================
+    // 🔴 MODIFICACIÓN 1: SERVER URL
+    // ===============================================
     servers: [
       { url: baseUrl, description: 'Servidor Desplegado/Local' }, // <-- Usamos la URL dinámica
     ],
-    // ===============================================
-    // 🔴 FIN DE MODIFICACIÓN 1
-    // ===============================================
+    // ===============================================
+    // 🔴 FIN DE MODIFICACIÓN 1
+    // ===============================================
     components: {
       securitySchemes: {
         bearerAuth: {
@@ -106,7 +106,7 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, '../public')));
 
 // -----------------------------------------
-// 3. RUTAS DECLARADAS
+// 3. RUTAS
 // -----------------------------------------
 
 app.use('/api/auth', authRoutes);
@@ -125,29 +125,11 @@ app.use('/api/ciclos', ciclosRoutes);
 app.use('/api/quiz', quizRoutes);
 app.use('/api/feedback', feedbackRoutes);
 app.use('/api/progreso', progresoRoutes);
-app.use('/api/admin', adminRoutes); // <-- ÚLTIMA RUTA DECLARADA
+app.use('/api/admin', adminRoutes);
 
-// -------------------------------------------------------------------
-// 🔥 MODIFICACIONES CRÍTICAS (PARA SOLUCIONAR EL 404 DE RENDER)
-// -------------------------------------------------------------------
-
-// 4. RUTAS FINALES Y GESTIÓN DE ERRORES 404
-// Ruta base (Root) para verificación de salud
-app.get('/', (req, res) => {
-    res.status(200).json({ message: 'API Llama Matemática activa.' });
-});
-
-// Captura cualquier ruta que no coincida (404)
-app.use((req, res, next) => {
-    res.status(404).json({ 
-        message: 'Ruta no encontrada (404). Revisa la URL.',
-        requestedUrl: req.originalUrl,
-    });
-});
-
-// -------------------------------------------------------------------
-// 5. INICIAR SERVIDOR
-// -------------------------------------------------------------------
+// -----------------------------------------
+// 4. INICIAR SERVIDOR
+// -----------------------------------------
 
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocs));
 
