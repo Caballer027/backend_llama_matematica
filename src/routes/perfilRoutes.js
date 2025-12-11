@@ -25,7 +25,7 @@ router.use(authMiddleware);
  *   get:
  *     summary: Obtiene el perfil del usuario autenticado
  *     tags: [Perfil]
- *     description: Retorna los datos personales, carrera, institución, rol, gemas y puntos de experiencia del usuario autenticado, junto con su personaje activo.
+ *     description: Retorna los datos personales, carrera, institución, rol, ciclo actual, gemas y puntos de experiencia del usuario autenticado, junto con su personaje activo.
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -57,6 +57,10 @@ router.use(authMiddleware);
  *                 carrera:
  *                   type: string
  *                   example: "Diseño y Desarrollo de Software"
+ *                 ciclo:
+ *                   type: string
+ *                   description: Ciclo académico actual del estudiante
+ *                   example: "Ciclo 5"
  *                 gemas:
  *                   type: integer
  *                   example: 1200
@@ -73,6 +77,8 @@ router.use(authMiddleware);
  *         description: No autorizado o token inválido.
  *       404:
  *         description: Perfil no encontrado.
+ *       500:
+ *         description: Error del servidor al obtener el perfil.
  */
 router.get('/me', perfilController.obtenerMiPerfil);
 
